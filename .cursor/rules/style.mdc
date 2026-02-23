@@ -1,0 +1,22 @@
+---
+alwaysApply: true
+---
+
+# Coding patterns
+
+-   DO NOT accept None or optional arguments. DO NOT test for whether or not an argument is None or contains None values. Rely on type checking to ensure that all parameters are valid. Maintain a strict expectation that function calls always use exactly the expected parameters.
+-   AVOID using cast whenever possible. Rely on type checking to maintain strict API expectations to avoid runtime errors.
+-   **DO NOT use any global state**
+
+# Testing Patterns
+
+-   **DO NOT use mocks** (unittest.mock, pytest-mock, etc.) in tests
+-   **USE dependency injection** - Design code to accept dependencies via constructor parameters. Initialize the dependencies ONLY in the application's main method.
+-   **USE Fake objects** - Create Fake implementations of interfaces/protocols for testing
+-   Fake objects should implement the same interface as real objects
+-   Fake objects should be configurable to simulate different scenarios (success, errors, edge cases)
+
+# Imports
+
+-   **NO defensive imports** - Do not use try/except blocks for imports. Assume all required dependencies are installed and available. If a dependency is optional, it should be documented in the project dependencies or configuration, not handled with defensive imports.
+-   **All imports at top** - All imports must be at the top of the module. Do not import anything inline within methods or functions.

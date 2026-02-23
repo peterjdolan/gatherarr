@@ -1,0 +1,97 @@
+{
+  "name": "Gatherarr",
+  "build": {
+    "dockerfile": "../Dockerfile.devcontainer",
+    "context": ".."
+  },
+  "forwardPorts": [9090],
+  "portsAttributes": {
+    "9090": {
+      "label": "Metrics Server",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "uv sync --all-extras",
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "charliermarsh.ruff",
+        "davidanson.vscode-markdownlint",
+        "eamodio.gitlens",
+        "esbenp.prettier-vscode",
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github",
+        "ms-azuretools.vscode-docker",
+        "ms-python.debugpy",
+        "ms-python.mypy-type-checker",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "redhat.vscode-yaml",
+        "usernamehw.errorlens"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "python.analysis.typeCheckingMode": "basic",
+        "python.analysis.extraPaths": ["${workspaceFolder}"],
+        "python.analysis.diagnosticMode": "workspace",
+        "python.linting.enabled": true,
+        "python.linting.ruffEnabled": true,
+        "python.formatting.provider": "none",
+        "python.languageServer": "Pylance",
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+            "source.organizeImports": "explicit"
+          },
+          "editor.rulers": [100]
+        },
+        "[yaml]": {
+          "editor.defaultFormatter": "redhat.vscode-yaml",
+          "editor.formatOnSave": true
+        },
+        "[json]": {
+          "editor.defaultFormatter": "redhat.vscode-yaml",
+          "editor.formatOnSave": true
+        },
+        "[markdown]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.formatOnSave": true
+        },
+        "files.exclude": {
+          "**/__pycache__": true,
+          "**/*.pyc": true,
+          "**/.pytest_cache": true,
+          "**/.mypy_cache": true,
+          "**/.ruff_cache": true
+        },
+        "files.watcherExclude": {
+          "**/.git/objects/**": true,
+          "**/.git/subtree-cache/**": true,
+          "**/node_modules/**": true,
+          "**/.venv/**": true,
+          "**/__pycache__/**": true,
+          "**/.pytest_cache/**": true,
+          "**/.mypy_cache/**": true,
+          "**/.ruff_cache/**": true
+        },
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.env.linux": {
+          "PYTHONPATH": "${workspaceFolder}"
+        }
+      }
+    }
+  },
+  "mounts": ["source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"],
+  "remoteEnv": {
+    "PYTHONPATH": "/workspace",
+    "UV_LINK_MODE": "copy"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  }
+}

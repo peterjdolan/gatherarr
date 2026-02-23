@@ -1,0 +1,38 @@
+---
+alwaysApply: false
+---
+# Running Code Checks
+
+Always use `uv run poe check` to run all code quality checks. This command will:
+
+-   Run linting with ruff (auto-fixes issues)
+-   Run tests with pytest
+-   Run type checking with mypy
+
+## Running Tests
+
+Always use `uv run poe test` to run the test suite. This will:
+
+-   Run all pytest tests in the `tests/` directory
+-   Generate coverage reports (terminal, HTML, and XML)
+-   Use verbose output for better visibility
+
+## Before Committing Code
+
+Before suggesting code changes are complete:
+
+1. Run `uv run poe check` to ensure all checks pass
+2. If checks fail, fix the issues before proceeding
+3. Ensure tests pass with `uv run poe test`
+4. As a last check before a commit, ensure integration tests pass with `uv run poe test-e2e`
+
+## When Making Code Changes
+
+-   After making code changes, verify they pass linting and type checks
+-   Ensure new code includes appropriate tests
+-   Run the full check suite: `uv run poe check`
+
+## Test Configuration Files
+
+-   **Reference examples** - Test configuration files serve as reference examples for users, so they should be complete, valid, and demonstrate proper configuration patterns
+-   **Documentation** - Test configuration files should include comments explaining their purpose and any test-specific requirements

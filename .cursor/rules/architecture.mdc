@@ -1,0 +1,16 @@
+---
+alwaysApply: false
+---
+
+# Backwards Compatibility
+
+-   **DO NOT maintain backwards compatibility** - Feel free to refactor, rename, or restructure code as needed
+-   **ALWAYS write clean, maintainable code** - do not preserve old interfaces or patterns when a simpler option could be implemented
+
+# Initialization and Configuration
+
+-   **Single initialization point** - All module initialization (config parsing, database connections, etc.) must happen once and only once in the main module (e.g., `app/main.py` lifespan function)
+-   **NO global accessor methods** - Do not create global accessor functions that read from environment variables or global state
+-   **Pass dependencies explicitly** - Parse configuration once in the main module and pass the config object explicitly to every code path that needs it
+-   **Configuration as parameter** - Functions that need configuration should accept it as a parameter rather than calling a global accessor
+-   **No environment variable access in modules** - Only the main module should read environment variables; all other modules receive configuration through function/constructor parameters
