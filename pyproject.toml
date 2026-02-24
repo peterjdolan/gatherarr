@@ -4,13 +4,22 @@ version = "0.1.0"
 description = "A minimal worker-style Arr search runner (initial skeleton)."
 requires-python = ">=3.13,<3.14"
 license = { text = "MIT" }
-dependencies = []
+dependencies = [
+  "flask>=3.0.0",
+  "httpx>=0.25.0",
+  "prometheus-client>=0.19.0",
+  "pydantic-settings>=2.0.0",
+  "pyyaml>=6.0.1",
+  "structlog>=24.1.0",
+  "tenacity>=8.2.0",
+]
 
 [dependency-groups]
 dev = [
   "mypy>=1.7.0",
   "poethepoet>=0.24.0",
   "pytest>=7.4.0",
+  "pytest-asyncio>=0.23.0",
   "pytest-timeout>=2.2.0",
   "ruff>=0.1.0",
   "types-pyyaml>=6.0.12",
@@ -19,7 +28,9 @@ dev = [
 [tool.poe.tasks]
 check = ["format", "lint", "type-check", "test"]
 format = "ruff format ."
-lint = "ruff check ."
+format-check = "ruff format --check ."
+lint = "ruff check --fix ."
+lint-check = "ruff check ."
 type-check = "mypy ."
 test = "pytest tests"
 

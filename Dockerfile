@@ -12,11 +12,10 @@ COPY uv.lock* ./
 
 # Install dependencies using uv into a virtual environment
 # uv sync creates a .venv directory with all dependencies
-# Include tools optional dependencies for DuckDuckGo, Wikipedia, and Arxiv tools
 RUN if [ -f uv.lock ]; then \
-        uv sync --frozen --no-dev --extra tools; \
+        uv sync --frozen --no-dev; \
     else \
-        uv sync --no-dev --extra tools; \
+        uv sync --no-dev; \
     fi
 
 # Runtime stage

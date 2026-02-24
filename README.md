@@ -4,11 +4,32 @@ A lightweight service that performs one job: periodically trigger searches in su
 
 Huntarrs are great, but when you need a calm, reliable, and simple helper, you look for a Gatherarr.
 
-This repository is the **initial boilerplate skeleton**. It includes project intent, standards, tooling, and build/development scaffolding. Runtime application code is intentionally deferred to the first implementation milestone.
-
 - **Primary value:** simple, reliable, observable automated search triggering
 - **Deployment model:** Docker container only
 - **Configuration model:** environment variables only (no UI, no CLI config files)
+
+## Minimal Deployment
+
+```bash
+git clone https://github.com/peterjdolan/gatherarr.git
+```
+
+```yaml
+services:
+  gatherarr:
+    build: ./gatherarr
+    container_name: gatherarr
+    environment:
+      GTH_METRICS_ENABLED: true
+      GTH_ARR_0_TYPE: radarr
+      GTH_ARR_0_NAME: Radarr
+      GTH_ARR_0_BASEURL: http://radarr:7878
+      GTH_ARR_0_APIKEY: 059b34da8966442aab57fd2e3debfa9b
+```
+
+```bash
+docker compose up --build gatherarr
+```
 
 ## Goals and Non-Goals
 
