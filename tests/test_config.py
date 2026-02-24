@@ -139,6 +139,7 @@ class TestLoadConfig:
 
   def test_load_multiple_targets(self) -> None:
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "radarr1",
       "GTH_ARR_0_BASEURL": "http://radarr1:7878",
@@ -155,18 +156,20 @@ class TestLoadConfig:
 
   def test_load_config_missing_required_raises(self) -> None:
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "radarr",
     }
     with pytest.raises(ValueError, match="Missing required config"):
       load_config(env)
 
   def test_load_config_no_targets_raises(self) -> None:
-    env: dict[str, str] = {}
+    env: dict[str, str] = {"GTH_STATE_FILE_PATH": ""}
     with pytest.raises(ValueError, match="At least one"):
       load_config(env)
 
   def test_load_config_invalid_arr_type_raises(self) -> None:
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "invalid",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
@@ -297,10 +300,9 @@ class TestConfigValidation:
 
   @pytest.mark.parametrize("state_file_path", ["", "   "])
   def test_config_validates_state_file_path_non_empty(self, state_file_path: str) -> None:
-    """Test that Config validates state_file_path is non-empty."""
-    with pytest.raises(ValidationError) as exc_info:
-      Config(state_file_path=state_file_path)
-    assert "state_file_path must be non-empty" in str(exc_info.value)
+    """Test that Config converts empty state_file_path to None."""
+    config = Config(state_file_path=state_file_path)
+    assert config.state_file_path is None
 
   def test_config_validates_state_file_path_parent_exists(self) -> None:
     """Test that Config validates state_file_path parent directory exists."""
@@ -438,6 +440,7 @@ class TestLoadConfigValidation:
   def test_load_config_validates_arr_target_url(self) -> None:
     """Test that load_config validates ArrTarget URLs."""
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "invalid-url",
@@ -459,6 +462,7 @@ class TestLoadConfigValidation:
   ) -> None:
     """Test that load_config validates ArrTarget positive integer fields."""
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
@@ -471,6 +475,7 @@ class TestLoadConfigValidation:
   def test_load_config_validates_arr_target_non_empty_name(self) -> None:
     """Test that load_config validates ArrTarget name is non-empty."""
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
@@ -483,6 +488,7 @@ class TestLoadConfigValidation:
   def test_load_config_validates_arr_target_non_empty_api_key(self) -> None:
     """Test that load_config validates ArrTarget api_key is non-empty."""
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
@@ -495,6 +501,7 @@ class TestLoadConfigValidation:
   def test_load_config_validates_config_ops_per_interval_positive(self) -> None:
     """Test that load_config validates Config ops_per_interval is positive."""
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_OPS_PER_INTERVAL": "0",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
@@ -507,6 +514,7 @@ class TestLoadConfigValidation:
   def test_load_config_validates_config_interval_s_positive(self) -> None:
     """Test that load_config validates Config interval_s is positive."""
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_INTERVAL_S": "-1",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
@@ -519,6 +527,7 @@ class TestLoadConfigValidation:
   def test_load_config_validates_config_metrics_port_positive(self) -> None:
     """Test that load_config validates Config metrics_port is positive."""
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_METRICS_PORT": "0",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
@@ -538,6 +547,7 @@ class TestLoadConfigValidation:
 
     try:
       env = {
+        "GTH_STATE_FILE_PATH": "",
         "GTH_ARR_0_TYPE": "radarr",
         "GTH_ARR_0_NAME": "radarr1",
         "GTH_ARR_0_BASEURL": "http://radarr1:7878",
@@ -564,6 +574,7 @@ class TestLoadConfigValidation:
 
     try:
       env = {
+        "GTH_STATE_FILE_PATH": "",
         "GTH_ARR_0_TYPE": "radarr",
         "GTH_ARR_0_BASEURL": "http://localhost:7878",
         "GTH_ARR_0_APIKEY": "test-key",
@@ -584,6 +595,7 @@ class TestLoadConfigValidation:
 
     try:
       env = {
+        "GTH_STATE_FILE_PATH": "",
         "GTH_ARR_0_TYPE": "radarr",
         "GTH_ARR_0_NAME": "test",
         "GTH_ARR_0_APIKEY": "test-key",
@@ -604,6 +616,7 @@ class TestLoadConfigValidation:
 
     try:
       env = {
+        "GTH_STATE_FILE_PATH": "",
         "GTH_ARR_0_TYPE": "radarr",
         "GTH_ARR_0_NAME": "test",
         "GTH_ARR_0_BASEURL": "http://localhost:7878",

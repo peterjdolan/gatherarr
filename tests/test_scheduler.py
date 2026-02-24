@@ -1,10 +1,9 @@
 """Tests for scheduler module."""
 
 import time
+from typing import TYPE_CHECKING
 
 import pytest
-
-from typing import TYPE_CHECKING
 
 from app.config import ArrTarget, ArrType
 from app.scheduler import Scheduler
@@ -128,8 +127,16 @@ class TestScheduler:
   async def test_run_once_respects_revisit_timeout(self, state_manager: StateManager) -> None:
     target = create_target("test", ArrType.RADARR)
     target_state = state_manager.get_target_state("test")
+    # Set item 1 to be processed 100 seconds ago (within the 3600s timeout)
     target_state.items["1"] = ItemState(
       item_id="1",
+      last_processed_timestamp=time.time() - 100.0,
+      last_result="success",
+      last_status="success",
+    )
+    # Set item 2 to be processed 100 seconds ago as well, so both should be skipped
+    target_state.items["2"] = ItemState(
+      item_id="2",
       last_processed_timestamp=time.time() - 100.0,
       last_result="success",
       last_status="success",
@@ -141,6 +148,7 @@ class TestScheduler:
     await scheduler.run_once(target)
 
     assert fake_client.get_movies_called
+    # Both items are within the revisit timeout, so neither should be searched
     assert not fake_client.search_movie_called
 
   @pytest.mark.asyncio
