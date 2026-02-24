@@ -119,9 +119,8 @@ async def main() -> None:
   logger.debug("Starting scheduler task")
   scheduler_task = asyncio.create_task(scheduler.start())
 
-  web_server_thread: threading.Thread | None = None
   if config.metrics_enabled:
-    web_server_thread = start_web_server(config.metrics_address, config.metrics_port)
+    start_web_server(config.metrics_address, config.metrics_port)
   else:
     logger.debug("Metrics disabled, skipping web server")
 
