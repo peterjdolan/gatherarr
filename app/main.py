@@ -77,6 +77,13 @@ async def main() -> None:
     sys.exit(1)
 
   setup_logging(config.log_level)
+  logger.debug(
+    "Configuration loaded and logging configured",
+    targets=len(config.targets),
+    metrics_enabled=config.metrics_enabled,
+    log_level=config.log_level,
+    config=config,
+  )
 
   logger.info(
     "Starting Gatherarr",
@@ -84,11 +91,15 @@ async def main() -> None:
     metrics_enabled=config.metrics_enabled,
   )
 
+  logger.debug("Initializing state storage", state_file_path=config.state_file_path)
   if config.state_file_path is None:
     storage: StateStorage = InMemoryStateStorage()
+    logger.debug("Using in-memory state storage")
   else:
     storage = FileStateStorage(config.state_file_path)
+    logger.debug("Using file-based state storage", state_file_path=config.state_file_path)
   state_manager = StateManager(storage)
+  logger.debug("Loading state")
   state_manager.load()
   logger.info("State loaded", targets=len(state_manager.state.targets))
 
@@ -105,11 +116,14 @@ async def main() -> None:
     )
 
   scheduler = Scheduler(config.targets, state_manager, arr_clients)
+  logger.debug("Starting scheduler task")
   scheduler_task = asyncio.create_task(scheduler.start())
 
   web_server_thread: threading.Thread | None = None
   if config.metrics_enabled:
     web_server_thread = start_web_server(config.metrics_address, config.metrics_port)
+  else:
+    logger.debug("Metrics disabled, skipping web server")
 
   shutdown_event = asyncio.Event()
 
@@ -127,18 +141,19 @@ async def main() -> None:
     pass
   finally:
     logger.info("Shutting down...")
+    logger.debug("Stopping scheduler")
     scheduler.stop()
+    logger.debug("Cancelling scheduler task")
     scheduler_task.cancel()
     try:
       await scheduler_task
     except asyncio.CancelledError:
+      logger.debug("Scheduler task cancelled")
       pass
 
+    logger.debug("Closing HTTP client")
     await http_client_instance.aclose()
-
-    # Flask server thread is daemon, so it will exit when main thread exits
-    if web_server_thread is not None:
-      logger.info("Flask server thread will exit with main thread")
+    logger.debug("HTTP client closed")
 
     logger.info("Application shutdown complete")
 

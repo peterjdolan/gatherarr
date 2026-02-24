@@ -7,7 +7,10 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
+import structlog
 import yaml
+
+logger = structlog.get_logger()
 
 
 class RunStatus(StrEnum):
@@ -60,6 +63,10 @@ class StateStorage(Protocol):
     """Write state data atomically."""
     ...
 
+  def move_corrupted(self) -> None:
+    """Move corrupted state aside (no-op for storage types that don't support it)."""
+    ...
+
 
 class FileStateStorage:
   """File-based state storage with atomic writes."""
@@ -69,35 +76,59 @@ class FileStateStorage:
 
   def read(self) -> dict | None:
     """Read state from file."""
+    logger.debug("Reading state from file", state_file_path=str(self.state_file_path))
     if not self.state_file_path.exists():
+      logger.debug("State file does not exist", state_file_path=str(self.state_file_path))
       return None
 
     try:
       with open(self.state_file_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-      return data if data is not None else {}
-    except yaml.YAMLError:
+      result = data if data is not None else {}
+      logger.debug(
+        "State read successfully", state_file_path=str(self.state_file_path), has_data=bool(result)
+      )
+      return result
+    except yaml.YAMLError as e:
+      logger.warning(
+        "YAML error while reading state", state_file_path=str(self.state_file_path), error=str(e)
+      )
       # Raise YAML errors to indicate corruption, caller will handle it
       raise
 
   def write(self, data: dict) -> None:
     """Write state to file using atomic write semantics."""
+    logger.debug("Writing state to file", state_file_path=str(self.state_file_path))
     self.state_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     temp_path = self.state_file_path.with_suffix(f".tmp.{int(time.time())}")
+    logger.debug(
+      "Using temporary file for atomic write",
+      temp_path=str(temp_path),
+      state_file_path=str(self.state_file_path),
+    )
     try:
       with open(temp_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
         f.flush()
         os.fsync(f.fileno())
+      logger.debug("Temporary file written and synced", temp_path=str(temp_path))
 
       temp_path.replace(self.state_file_path)
+      logger.debug(
+        "Temporary file replaced state file",
+        temp_path=str(temp_path),
+        state_file_path=str(self.state_file_path),
+      )
       try:
-        os.fsync(self.state_file_path.parent.open("r").fileno())
+        with self.state_file_path.parent.open("r") as parent_fd:
+          os.fsync(parent_fd.fileno())
       except (OSError, AttributeError):
         pass
+      logger.debug("State file written successfully", state_file_path=str(self.state_file_path))
     finally:
       if temp_path.exists():
+        logger.debug("Cleaning up temporary file", temp_path=str(temp_path))
         try:
           temp_path.unlink()
         except OSError:
@@ -106,12 +137,28 @@ class FileStateStorage:
   def move_corrupted(self) -> None:
     """Move corrupted state file aside."""
     if not self.state_file_path.exists():
+      logger.debug("No state file to move (corrupted)", state_file_path=str(self.state_file_path))
       return
     timestamp = int(time.time())
     corrupt_path = self.state_file_path.parent / f".corrupt.{timestamp}"
+    logger.debug(
+      "Moving corrupted state file",
+      state_file_path=str(self.state_file_path),
+      corrupt_path=str(corrupt_path),
+    )
     try:
       self.state_file_path.rename(corrupt_path)
-    except OSError:
+      logger.debug(
+        "Corrupted state file moved",
+        state_file_path=str(self.state_file_path),
+        corrupt_path=str(corrupt_path),
+      )
+    except OSError as e:
+      logger.error(
+        "Failed to move corrupted state file",
+        state_file_path=str(self.state_file_path),
+        error=str(e),
+      )
       pass
 
 
@@ -143,16 +190,26 @@ class StateManager:
 
   def load(self) -> None:
     """Load state from storage, recovering from corruption if needed."""
+    logger.debug("Loading state from storage")
     try:
       data = self.storage.read()
       if data is None:
+        logger.debug("No state data found, starting with fresh state")
         return
 
+      logger.debug("Deserializing state data", has_data=bool(data))
       try:
         self.state = self._deserialize(data)
+        logger.debug(
+          "State loaded successfully",
+          total_runs=self.state.total_runs,
+          target_count=len(self.state.targets),
+        )
       except (KeyError, ValueError, TypeError) as e:
+        logger.error("State deserialization failed", error=str(e))
         self._handle_corrupted_state(e)
     except yaml.YAMLError as e:
+      logger.error("YAML parsing error while loading state", error=str(e))
       # YAML parsing error indicates corruption
       self._handle_corrupted_state(e)
 
@@ -194,14 +251,21 @@ class StateManager:
 
   def _handle_corrupted_state(self, error: Exception) -> None:
     """Handle corrupted state by moving it aside and starting fresh."""
-    if hasattr(self.storage, "move_corrupted"):
-      self.storage.move_corrupted()
+    logger.warning("State corruption detected, recovering", error=str(error))
+    self.storage.move_corrupted()
     self.state = State()
 
   def save(self) -> None:
     """Save state to storage using atomic write semantics."""
+    logger.debug(
+      "Saving state",
+      total_runs=self.state.total_runs,
+      target_count=len(self.state.targets),
+    )
     data = self._serialize()
+    logger.debug("State serialized, writing to storage")
     self.storage.write(data)
+    logger.debug("State saved successfully")
 
   def _serialize(self) -> dict:
     """Serialize state to dictionary using dataclasses.asdict."""
@@ -217,5 +281,8 @@ class StateManager:
   def get_target_state(self, target_name: str) -> TargetState:
     """Get or create state for a target."""
     if target_name not in self.state.targets:
+      logger.debug("Creating new target state", target=target_name)
       self.state.targets[target_name] = TargetState()
+    else:
+      logger.debug("Retrieving existing target state", target=target_name)
     return self.state.targets[target_name]

@@ -67,17 +67,39 @@ class Scheduler:
       type=target.arr_type.value,
       run_id=run_id,
     )
+    logger.debug(
+      "Run configuration",
+      target=target.name,
+      type=target.arr_type.value,
+      run_id=run_id,
+      ops_per_interval=target.ops_per_interval,
+      interval_s=target.interval_s,
+      item_revisit_timeout_s=target.item_revisit_timeout_s,
+    )
 
     try:
       client = self.arr_clients[target.name]
       start_time = time.time()
 
+      logger.debug(
+        "Fetching items",
+        target=target.name,
+        type=target.arr_type.value,
+        run_id=run_id,
+      )
       if target.arr_type.value == "radarr":
         items = await client.get_movies()
         handler: ItemHandler = MovieHandler()
       else:
         items = await client.get_series()
         handler = SeriesHandler()
+      logger.debug(
+        "Items fetched",
+        target=target.name,
+        type=target.arr_type.value,
+        run_id=run_id,
+        item_count=len(items),
+      )
 
       processed = await self._process_items(
         target, client, items, target_state, now, run_id, handler
@@ -117,7 +139,18 @@ class Scheduler:
         run_id=run_id,
         status="error",
         error=error_msg,
+        consecutive_failures=target_state.consecutive_failures,
       )
+
+      # Warn if consecutive failures are accumulating
+      if target_state.consecutive_failures >= 3:
+        logger.warning(
+          "Multiple consecutive run failures",
+          target=target.name,
+          type=target.arr_type.value,
+          consecutive_failures=target_state.consecutive_failures,
+          last_error=error_msg,
+        )
 
     self.state_manager.state.total_runs += 1
     try:
@@ -142,7 +175,10 @@ class Scheduler:
           tasks.append(self.run_once(target))
 
       if tasks:
+        logger.debug("Executing scheduled tasks", task_count=len(tasks))
         await asyncio.gather(*tasks, return_exceptions=True)
+      else:
+        logger.debug("No tasks to execute, sleeping")
 
       await asyncio.sleep(10)
 
@@ -165,12 +201,36 @@ class Scheduler:
     processed = 0
     ops_count = 0
 
+    logger.debug(
+      "Processing items",
+      target=target.name,
+      type=target.arr_type.value,
+      run_id=run_id,
+      total_items=len(items),
+      ops_per_interval=target.ops_per_interval,
+    )
+
     for item in items:
       if ops_count >= target.ops_per_interval:
+        logger.debug(
+          "Reached ops_per_interval limit",
+          target=target.name,
+          type=target.arr_type.value,
+          run_id=run_id,
+          ops_count=ops_count,
+          ops_per_interval=target.ops_per_interval,
+        )
         break
 
       item_id, item_identifier = item_handler.extract_id(item)
       if item_id is None:
+        logger.warning(
+          "Skipping item with no ID",
+          target=target.name,
+          type=target.arr_type.value,
+          run_id=run_id,
+          item_identifier=item_identifier,
+        )
         continue
 
       item_id_str = str(item_id)
@@ -179,10 +239,28 @@ class Scheduler:
       if item_state is not None:
         time_since_last = now - item_state.last_processed_timestamp
         if time_since_last < target.item_revisit_timeout_s:
+          logger.debug(
+            "Skipping item (revisit timeout not met)",
+            target=target.name,
+            type=target.arr_type.value,
+            run_id=run_id,
+            item_id=item_id_str,
+            item_identifier=item_identifier,
+            time_since_last=time_since_last,
+            revisit_timeout=target.item_revisit_timeout_s,
+          )
           skips_total.labels(target=target.name, type=target.arr_type.value).inc()
           continue
 
       try:
+        logger.info(
+          "Triggering search for item",
+          target=target.name,
+          type=target.arr_type.value,
+          run_id=run_id,
+          item_id=item_id_str,
+          item_identifier=item_identifier,
+        )
         request_start = time.time()
         requests_total.labels(target=target.name, type=target.arr_type.value).inc()
         await item_handler.search(client, item_id)
@@ -201,10 +279,37 @@ class Scheduler:
         grabs_total.labels(target=target.name, type=target.arr_type.value).inc()
         processed += 1
         ops_count += 1
+        logger.debug(
+          "Item processed successfully",
+          target=target.name,
+          type=target.arr_type.value,
+          run_id=run_id,
+          item_id=item_id_str,
+          item_identifier=item_identifier,
+          processed=processed,
+          ops_count=ops_count,
+        )
       except Exception as e:
+        logger.warning(
+          "Search failed for item",
+          target=target.name,
+          type=target.arr_type.value,
+          run_id=run_id,
+          item_id=item_id_str,
+          item_identifier=item_identifier,
+          error=str(e)[:100],
+        )
         request_errors_total.labels(target=target.name, type=target.arr_type.value).inc()
         item_handler.log_error(target.name, item_identifier, e)
 
+    logger.debug(
+      "Finished processing items",
+      target=target.name,
+      type=target.arr_type.value,
+      run_id=run_id,
+      processed=processed,
+      total_items=len(items),
+    )
     return processed
 
 

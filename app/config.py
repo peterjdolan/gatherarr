@@ -8,8 +8,11 @@ from enum import StrEnum
 from pathlib import Path
 from urllib.parse import urlparse
 
+import structlog
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = structlog.get_logger()
 
 
 class ArrType(StrEnum):
@@ -207,23 +210,32 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       else TargetOverrideSettings()
     )
 
-    targets.append(
-      ArrTarget(
-        name=env_dict[name_key],
-        arr_type=arr_type,
-        base_url=env_dict[baseurl_key],
-        api_key=env_dict[apikey_key],
-        ops_per_interval=overrides.ops_per_interval
-        if overrides.ops_per_interval is not None
-        else base_config.ops_per_interval,
-        interval_s=overrides.interval_s
-        if overrides.interval_s is not None
-        else base_config.interval_s,
-        item_revisit_timeout_s=overrides.item_revisit_timeout_s
-        if overrides.item_revisit_timeout_s is not None
-        else base_config.item_revisit_s,
-      )
+    target = ArrTarget(
+      name=env_dict[name_key],
+      arr_type=arr_type,
+      base_url=env_dict[baseurl_key],
+      api_key=env_dict[apikey_key],
+      ops_per_interval=overrides.ops_per_interval
+      if overrides.ops_per_interval is not None
+      else base_config.ops_per_interval,
+      interval_s=overrides.interval_s
+      if overrides.interval_s is not None
+      else base_config.interval_s,
+      item_revisit_timeout_s=overrides.item_revisit_timeout_s
+      if overrides.item_revisit_timeout_s is not None
+      else base_config.item_revisit_s,
     )
+    logger.debug(
+      "Target configuration created",
+      index=n,
+      name=target.name,
+      arr_type=target.arr_type.value,
+      base_url=target.base_url,
+      ops_per_interval=target.ops_per_interval,
+      interval_s=target.interval_s,
+      item_revisit_timeout_s=target.item_revisit_timeout_s,
+    )
+    targets.append(target)
     n += 1
 
   if not targets:
@@ -231,4 +243,5 @@ def load_config(env: dict[str, str] | None = None) -> Config:
 
   config = Config()
   config.targets = targets
+  logger.debug("Configuration loaded successfully", target_count=len(config.targets), config=config)
   return config
