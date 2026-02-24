@@ -1,7 +1,7 @@
 """Tests for *arr client module."""
 
 import asyncio
-from typing import Any
+from typing import Any, Mapping
 
 import httpx
 import pytest
@@ -13,7 +13,7 @@ class FakeHttpClient(HttpClient):
   """Fake HTTP client for testing."""
 
   def __init__(
-    self, responses: dict[str, Any] | None = None, errors: dict[str, BaseException] | None = None
+    self, responses: dict[str, Any] | None = None, errors: Mapping[str, BaseException] | None = None
   ) -> None:
     self.responses = responses or {}
     self.errors = errors or {}

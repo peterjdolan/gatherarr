@@ -1,6 +1,6 @@
 """HTTP client implementation using httpx."""
 
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 import structlog
@@ -10,10 +10,36 @@ from app.arr_client import HttpClient
 logger = structlog.get_logger()
 
 
+class AsyncHttpClient(Protocol):
+  """Protocol for async HTTP client interface."""
+
+  async def get(self, url: Any, *args: Any, **kwargs: Any) -> "HttpResponse":
+    """Make GET request."""
+    ...
+
+  async def post(self, url: Any, *args: Any, **kwargs: Any) -> "HttpResponse":
+    """Make POST request."""
+    ...
+
+
+class HttpResponse(Protocol):
+  """Protocol for HTTP response interface."""
+
+  status_code: int
+
+  def raise_for_status(self) -> None:
+    """Raise error for non-2xx status."""
+    ...
+
+  def json(self) -> Any:
+    """Return JSON data."""
+    ...
+
+
 class HttpxClient(HttpClient):
   """httpx-based HTTP client implementation."""
 
-  def __init__(self, client: httpx.AsyncClient) -> None:
+  def __init__(self, client: AsyncHttpClient | httpx.AsyncClient) -> None:
     self.client = client
 
   async def get(self, url: str, headers: dict[str, str], timeout: float) -> Any:

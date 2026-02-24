@@ -1,6 +1,6 @@
 """HTTP client for *arr APIs with retry logic."""
 
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 import structlog
@@ -32,7 +32,8 @@ class HttpClient(Protocol):
 def _is_retryable_response_error(exception: BaseException) -> bool:
   """Check if HTTPStatusError is retryable (5xx or 429)."""
   if isinstance(exception, httpx.HTTPStatusError):
-    return exception.response.status_code >= 500 or exception.response.status_code == 429
+    status_code: int = exception.response.status_code
+    return status_code >= 500 or status_code == 429
   return False
 
 
@@ -142,7 +143,7 @@ class ArrClient:
         base_url=self.base_url,
         movie_count=movie_count,
       )
-      return result
+      return cast(list[dict[str, Any]], result)
     except Exception as e:
       error_msg = str(e)[:200]
       logger.error(
@@ -177,7 +178,7 @@ class ArrClient:
         base_url=self.base_url,
         series_count=series_count,
       )
-      return result
+      return cast(list[dict[str, Any]], result)
     except Exception as e:
       error_msg = str(e)[:200]
       logger.error(
@@ -215,7 +216,7 @@ class ArrClient:
         movie_id=movie_id,
         result_id=result.get("id") if isinstance(result, dict) else None,
       )
-      return result
+      return cast(dict[str, Any], result)
     except Exception as e:
       error_msg = str(e)[:200]
       logger.error(
@@ -255,7 +256,7 @@ class ArrClient:
         series_id=series_id,
         result_id=result.get("id") if isinstance(result, dict) else None,
       )
-      return result
+      return cast(dict[str, Any], result)
     except Exception as e:
       error_msg = str(e)[:200]
       logger.error(
