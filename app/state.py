@@ -39,7 +39,6 @@ class TargetState:
   last_success_timestamp: float = 0.0
   last_status: RunStatus = RunStatus.UNKNOWN
   consecutive_failures: int = 0
-  last_error_summary: str = ""
   items: dict[str, ItemState] = field(default_factory=dict)
 
 
@@ -233,7 +232,6 @@ class StateManager:
         last_success_timestamp=target_data.get("last_success_timestamp", 0.0),
         last_status=last_status,
         consecutive_failures=target_data.get("consecutive_failures", 0),
-        last_error_summary=target_data.get("last_error_summary", ""),
       )
 
       items_data = target_data.get("items", {})

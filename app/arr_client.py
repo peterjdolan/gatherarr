@@ -12,6 +12,8 @@ from tenacity import (
   wait_exponential,
 )
 
+from app.config import ArrTarget, ArrType
+
 logger = structlog.get_logger()
 
 
@@ -42,17 +44,18 @@ class ArrClient:
 
   def __init__(
     self,
-    base_url: str,
-    api_key: str,
-    arr_type: str,
+    target: ArrTarget,
     http_client: HttpClient,
     max_retries: int = 3,
     retry_delay_s: float = 1.0,
     timeout_s: float = 30.0,
   ) -> None:
-    self.base_url = base_url.rstrip("/")
-    self.api_key = api_key
-    self.arr_type = arr_type
+    self.target = target
+    self.base_url = target.base_url.rstrip("/")
+    self.logging_ids = {
+      "target_name": target.name,
+      "target_type": target.arr_type.value,
+    }
     self.http_client = http_client
     self.max_retries = max_retries
     self.retry_delay_s = retry_delay_s
@@ -60,7 +63,7 @@ class ArrClient:
 
   def _get_headers(self) -> dict[str, str]:
     """Get HTTP headers for API requests."""
-    return {"X-Api-Key": self.api_key, "Content-Type": "application/json"}
+    return {"X-Api-Key": self.target.api_key, "Content-Type": "application/json"}
 
   def _make_retry_decorator(self) -> Any:
     """Create a retry decorator with instance-specific configuration."""
@@ -76,12 +79,12 @@ class ArrClient:
     """Make HTTP request with retry logic using tenacity."""
     logger.debug(
       "Making HTTP request",
-      arr_type=self.arr_type,
       method=method,
       url=url,
       has_payload=payload is not None,
       timeout_s=self.timeout_s,
       max_retries=self.max_retries,
+      **self.logging_ids,
     )
     retry_decorator = self._make_retry_decorator()
 
@@ -90,10 +93,10 @@ class ArrClient:
       headers = self._get_headers()
       logger.debug(
         "Executing HTTP request",
-        arr_type=self.arr_type,
         method=method,
         url=url,
         has_payload=payload is not None,
+        **self.logging_ids,
       )
       if method == "GET":
         result = await self.http_client.get(url, headers, self.timeout_s)
@@ -101,10 +104,10 @@ class ArrClient:
         result = await self.http_client.post(url, headers, self.timeout_s, payload)
       logger.debug(
         "HTTP request completed",
-        arr_type=self.arr_type,
         method=method,
         url=url,
         has_result=result is not None,
+        **self.logging_ids,
       )
       return result
 
@@ -113,160 +116,147 @@ class ArrClient:
     except Exception as e:
       logger.debug(
         "HTTP request failed",
-        arr_type=self.arr_type,
         method=method,
         url=url,
         error=str(e)[:200],
+        **self.logging_ids,
       )
       raise
 
   async def get_movies(self) -> list[dict[str, Any]]:
     """Get all movies from Radarr."""
-    if self.arr_type != "radarr":
-      raise ValueError(f"get_movies() only supported for radarr, got {self.arr_type}")
-    logger.debug("Getting movies from Radarr", base_url=self.base_url)
+    if self.target.arr_type != ArrType.RADARR:
+      raise ValueError(f"get_movies() only supported for radarr, got {self.target.arr_type}")
     url = f"{self.base_url}/api/v3/movie"
     logger.debug(
-      "Fetching movies from Radarr",
+      "Fetching movies",
       action="get_movies",
-      arr_type=self.arr_type,
-      base_url=self.base_url,
       url=url,
+      **self.logging_ids,
     )
     try:
       result = await self._request("GET", url)
       movie_count = len(result) if isinstance(result, list) else 0
       logger.debug(
-        "Movies fetched from Radarr",
+        "Fetched movies",
         action="get_movies",
-        arr_type=self.arr_type,
-        base_url=self.base_url,
         movie_count=movie_count,
+        **self.logging_ids,
       )
       return cast(list[dict[str, Any]], result)
     except Exception as e:
       error_msg = str(e)[:200]
       logger.error(
-        "Failed to fetch movies from Radarr",
+        "Failed to fetch movies",
         action="get_movies",
-        arr_type=self.arr_type,
-        base_url=self.base_url,
         url=url,
         error=error_msg,
+        **self.logging_ids,
       )
       raise
 
   async def get_series(self) -> list[dict[str, Any]]:
     """Get all series from Sonarr."""
-    if self.arr_type != "sonarr":
-      raise ValueError(f"get_series() only supported for sonarr, got {self.arr_type}")
+    if self.target.arr_type != ArrType.SONARR:
+      raise ValueError(f"get_series() only supported for sonarr, got {self.target.arr_type}")
     url = f"{self.base_url}/api/v3/series"
     logger.debug(
-      "Fetching series from Sonarr",
+      "Fetching series",
       action="get_series",
-      arr_type=self.arr_type,
-      base_url=self.base_url,
       url=url,
+      **self.logging_ids,
     )
     try:
       result = await self._request("GET", url)
       series_count = len(result) if isinstance(result, list) else 0
       logger.debug(
-        "Series fetched from Sonarr",
+        "Fetched series",
         action="get_series",
-        arr_type=self.arr_type,
-        base_url=self.base_url,
         series_count=series_count,
+        **self.logging_ids,
       )
       return cast(list[dict[str, Any]], result)
     except Exception as e:
       error_msg = str(e)[:200]
       logger.error(
-        "Failed to fetch series from Sonarr",
+        "Failed to fetch series",
         action="get_series",
-        arr_type=self.arr_type,
-        base_url=self.base_url,
         url=url,
         error=error_msg,
+        **self.logging_ids,
       )
       raise
 
   async def search_movie(self, movie_id: int) -> dict[str, Any]:
     """Trigger search for a movie in Radarr."""
-    if self.arr_type != "radarr":
-      raise ValueError(f"search_movie() only supported for radarr, got {self.arr_type}")
+    if self.target.arr_type != ArrType.RADARR:
+      raise ValueError(f"search_movie() only supported for radarr, got {self.target.arr_type}")
     url = f"{self.base_url}/api/v3/command"
     payload = {"name": "MoviesSearch", "movieIds": [movie_id]}
     logger.debug(
-      "Triggering movie search in Radarr",
-      action="search_movie",
-      arr_type=self.arr_type,
-      base_url=self.base_url,
+      "Searching movie",
       movie_id=movie_id,
+      action="search_movie",
       url=url,
       payload=payload,
+      **self.logging_ids,
     )
     try:
       result = await self._request("POST", url, payload)
       logger.debug(
-        "Movie search triggered in Radarr",
-        action="search_movie",
-        arr_type=self.arr_type,
-        base_url=self.base_url,
+        "Movie searched",
         movie_id=movie_id,
+        action="search_movie",
         result_id=result.get("id") if isinstance(result, dict) else None,
+        **self.logging_ids,
       )
       return cast(dict[str, Any], result)
     except Exception as e:
       error_msg = str(e)[:200]
       logger.error(
-        "Failed to trigger movie search in Radarr",
-        action="search_movie",
-        arr_type=self.arr_type,
-        base_url=self.base_url,
+        "Failed to search movie",
         movie_id=movie_id,
+        action="search_movie",
         url=url,
         payload=payload,
         error=error_msg,
+        **self.logging_ids,
       )
       raise
 
   async def search_series(self, series_id: int) -> dict[str, Any]:
     """Trigger search for a series in Sonarr."""
-    if self.arr_type != "sonarr":
-      raise ValueError(f"search_series() only supported for sonarr, got {self.arr_type}")
+    if self.target.arr_type != ArrType.SONARR:
+      raise ValueError(f"search_series() only supported for sonarr, got {self.target.arr_type}")
     url = f"{self.base_url}/api/v3/command"
     payload = {"name": "SeriesSearch", "seriesId": series_id}
     logger.debug(
-      "Triggering series search in Sonarr",
-      action="search_series",
-      arr_type=self.arr_type,
-      base_url=self.base_url,
+      "Searching series",
       series_id=series_id,
+      action="search_series",
       url=url,
       payload=payload,
+      **self.logging_ids,
     )
     try:
       result = await self._request("POST", url, payload)
       logger.debug(
-        "Series search triggered in Sonarr",
-        action="search_series",
-        arr_type=self.arr_type,
-        base_url=self.base_url,
+        "Series searched",
         series_id=series_id,
+        action="search_series",
         result_id=result.get("id") if isinstance(result, dict) else None,
+        **self.logging_ids,
       )
       return cast(dict[str, Any], result)
     except Exception as e:
       error_msg = str(e)[:200]
       logger.error(
-        "Failed to trigger series search in Sonarr",
-        action="search_series",
-        arr_type=self.arr_type,
-        base_url=self.base_url,
+        "Failed to search series",
         series_id=series_id,
+        action="search_series",
         url=url,
         payload=payload,
         error=error_msg,
+        **self.logging_ids,
       )
       raise

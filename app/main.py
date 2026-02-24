@@ -64,7 +64,7 @@ def start_web_server(address: str, port: int) -> threading.Thread:
 
   server_thread = threading.Thread(target=run_server, daemon=True)
   server_thread.start()
-  logger.info("HTTP server started", address=address, port=port)
+  logger.debug("HTTP server started", address=address, port=port)
   return server_thread
 
 
@@ -85,7 +85,7 @@ async def main() -> None:
     config=config,
   )
 
-  logger.info(
+  logger.debug(
     "Starting Gatherarr",
     targets=len(config.targets),
     metrics_enabled=config.metrics_enabled,
@@ -101,7 +101,7 @@ async def main() -> None:
   state_manager = StateManager(storage)
   logger.debug("Loading state")
   state_manager.load()
-  logger.info("State loaded", targets=len(state_manager.state.targets))
+  logger.debug("State loaded", targets=len(state_manager.state.targets))
 
   http_client_instance = httpx.AsyncClient()
   http_client = HttpxClient(http_client_instance)
@@ -109,9 +109,7 @@ async def main() -> None:
   arr_clients: dict[str, ArrClient] = {}
   for target in config.targets:
     arr_clients[target.name] = ArrClient(
-      base_url=target.base_url,
-      api_key=target.api_key,
-      arr_type=target.arr_type.value,
+      target=target,
       http_client=http_client,
     )
 
@@ -127,7 +125,7 @@ async def main() -> None:
   shutdown_event = asyncio.Event()
 
   def signal_handler() -> None:
-    logger.info("Received shutdown signal")
+    logger.debug("Received shutdown signal")
     shutdown_event.set()
 
   loop = asyncio.get_event_loop()
@@ -139,7 +137,7 @@ async def main() -> None:
   except KeyboardInterrupt:
     pass
   finally:
-    logger.info("Shutting down...")
+    logger.debug("Shutting down...")
     logger.debug("Stopping scheduler")
     scheduler.stop()
     logger.debug("Cancelling scheduler task")
@@ -154,7 +152,7 @@ async def main() -> None:
     await http_client_instance.aclose()
     logger.debug("HTTP client closed")
 
-    logger.info("Application shutdown complete")
+    logger.debug("Application shutdown complete")
 
 
 if __name__ == "__main__":
