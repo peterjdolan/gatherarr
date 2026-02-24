@@ -30,7 +30,13 @@ class HttpxClient(HttpClient):
     self, url: str, headers: dict[str, str], timeout: float, payload: dict[str, Any] | None = None
   ) -> Any:
     """Make POST request."""
-    logger.debug("Executing POST request", url=url, timeout=timeout, has_headers=bool(headers), has_payload=payload is not None)
+    logger.debug(
+      "Executing POST request",
+      url=url,
+      timeout=timeout,
+      has_headers=bool(headers),
+      has_payload=payload is not None,
+    )
     response = await self.client.post(url, headers=headers, json=payload, timeout=timeout)
     logger.debug("POST request completed", url=url, status_code=response.status_code)
     response.raise_for_status()
