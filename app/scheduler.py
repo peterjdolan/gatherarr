@@ -9,7 +9,7 @@ import structlog
 
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
-from app.logging import log_movie_action, log_series_action
+from app.logging import Action, log_movie_action, log_series_action
 from app.metrics import (
   grabs_total,
   last_success_timestamp_seconds,
@@ -39,6 +39,7 @@ class MovieId(ItemId):
   """Item identifier for movies."""
 
   movie_id: int
+  movie_name: str | None
 
   def format_for_state(self) -> str:
     """Format movie ID for state lookup."""
@@ -50,9 +51,10 @@ class SeriesId(ItemId):
   """Item identifier for series."""
 
   series_id: int
+  series_name: str | None
 
   def format_for_state(self) -> str:
-    """Format series ID for state lookup."""
+    """Format series ID and name for state lookup."""
     return str(self.series_id)
 
 
@@ -121,37 +123,34 @@ class Scheduler:
   async def run_once(self, target: ArrTarget) -> None:
     """Execute a single run for a target."""
     target_state = self.state_manager.get_target_state(target.name)
-    now = time.time()
+    run_start = time.time()
 
-    target_state.last_run_timestamp = now
-    run_id = f"{target.name}-{int(now)}"
-    logging_ids = {
-      "target_name": target.name,
-      "target_type": target.arr_type.value,
-      "run_id": run_id,
+    target_state.last_run_timestamp = run_start
+    run_logging_ids = {
+      "run_id": f"{target.name}-{int(run_start)}",
+      "run_start_timestamp": run_start,
     }
 
     logger.debug(
-      "Starting run",
-      ops_per_interval=target.ops_per_interval,
-      interval_s=target.interval_s,
-      item_revisit_timeout_s=target.item_revisit_timeout_s,
-      **logging_ids,
+      "Starting run", **run_logging_ids, **target.logging_ids(), **target_state.logging_ids()
     )
 
     try:
       client = self.arr_clients[target.name]
-      start_time = time.time()
 
-      logger.debug(
-        "Fetching items",
-        **logging_ids,
-      )
+      client_run_logging_ids = {
+        **run_logging_ids,
+        **target.logging_ids(),
+        **target_state.logging_ids(),
+      }
+
+      logger.debug("Fetching items", **client_run_logging_ids)
+      handler: ItemHandler
       if target.arr_type == ArrType.RADARR:
-        items = await client.get_movies()
-        handler: ItemHandler = MovieHandler()
+        items = await client.get_movies(client_run_logging_ids)
+        handler = MovieHandler()
       elif target.arr_type == ArrType.SONARR:
-        items = await client.get_series()
+        items = await client.get_series(client_run_logging_ids)
         handler = SeriesHandler()
       else:
         raise ValueError(f"Unsupported target type: {target.arr_type}")
@@ -159,51 +158,52 @@ class Scheduler:
       logger.debug(
         "Items fetched",
         item_count=len(items),
-        **logging_ids,
+        **client_run_logging_ids,
       )
 
       processed = await self._process_items(
-        target, client, items, target_state, now, run_id, handler
+        target, client, items, target_state, handler, run_start, run_logging_ids
       )
 
-      duration_ms = int((time.time() - start_time) * 1000)
-      target_state.last_success_timestamp = now
+      run_end = time.time()
+
+      duration_s = run_end - run_start
+      target_state.last_success_timestamp = time.time()
       target_state.last_status = RunStatus.SUCCESS
       target_state.consecutive_failures = 0
 
-      last_success_timestamp_seconds.labels(target=target.name, type=target.arr_type.value).set(now)
+      last_success_timestamp_seconds.labels(target=target.name, type=target.arr_type.value).set(
+        run_end
+      )
       run_total.labels(target=target.name, type=target.arr_type.value, status="success").inc()
 
       logger.debug(
         "Run completed",
         status="success",
         processed=processed,
-        duration_ms=duration_ms,
-        target_state=target_state,
-        **logging_ids,
+        duration_s=duration_s,
+        **run_logging_ids,
       )
     except Exception as e:
-      error_msg = str(e)[:200]
       target_state.last_status = RunStatus.ERROR
       target_state.consecutive_failures += 1
 
       run_total.labels(target=target.name, type=target.arr_type.value, status="error").inc()
       request_errors_total.labels(target=target.name, type=target.arr_type.value).inc()
 
-      logger.error(
+      logger.exception(
         "Run failed",
+        exception=e,
         status="error",
-        error=error_msg,
-        duration_ms=duration_ms,
-        target_state=target_state,
-        **logging_ids,
+        duration_s=duration_s,
+        **run_logging_ids,
       )
 
     self.state_manager.state.total_runs += 1
     try:
       self.state_manager.save()
     except Exception as e:
-      logger.error("Failed to save state", error=str(e))
+      logger.exception("Failed to save state", exception=e)
       state_write_failures_total.inc()
 
   async def start(self) -> None:
@@ -225,9 +225,9 @@ class Scheduler:
         logger.debug("Executing scheduled tasks", task_count=len(tasks))
         await asyncio.gather(*tasks, return_exceptions=True)
       else:
-        logger.debug("No tasks to execute, sleeping")
+        logger.debug("No tasks to execute, sleeping..")
 
-      await asyncio.sleep(10)
+      await asyncio.sleep(1)
 
   def stop(self) -> None:
     """Stop the scheduler."""
@@ -240,9 +240,9 @@ class Scheduler:
     client: ArrClient,
     items: list[dict[str, Any]],
     target_state: TargetState,
-    now: float,
-    logging_ids: dict[str, str],
     item_handler: ItemHandler,
+    run_start: float,
+    logging_ids: dict[str, Any],
   ) -> int:
     """Process items and trigger searches using the provided handler."""
     processed = 0
@@ -250,34 +250,33 @@ class Scheduler:
 
     logger.debug(
       "Processing items",
-      target_name=target.name,
-      target_type=target.arr_type.value,
       total_items=len(items),
-      ops_per_interval=target.ops_per_interval,
       **logging_ids,
+      **target.logging_ids(),
+      **target_state.logging_ids(),
     )
 
     for item in items:
       if ops_count >= target.ops_per_interval:
         logger.debug(
           "Reached ops_per_interval limit",
-          target_name=target.name,
-          target_type=target.arr_type.value,
           ops_count=ops_count,
-          ops_per_interval=target.ops_per_interval,
           **logging_ids,
+          **target.logging_ids(),
+          **target_state.logging_ids(),
         )
         break
 
-      logging_ids = item_handler.extract_logging_id(item)
+      item_logging_ids = item_handler.extract_logging_id(item)
       item_id = item_handler.extract_item_id(item)
       if item_id is None:
         # Use generic logger for items without IDs since we don't have correlation fields
         logger.warning(
           "Skipping item with no ID",
-          target_name=target.name,
-          target_type=target.arr_type.value,
           **logging_ids,
+          **target.logging_ids(),
+          **target_state.logging_ids(),
+          **item_logging_ids,
         )
         continue
 
@@ -285,15 +284,16 @@ class Scheduler:
       item_state = target_state.items.get(item_id_str)
 
       if item_state is not None:
-        time_since_last = now - item_state.last_processed_timestamp
+        time_since_last = time.time() - item_state.last_processed_timestamp
         if time_since_last < target.item_revisit_timeout_s:
           logger.debug(
             "Skipping item (revisit timeout not met)",
-            target=target.name,
-            type=target.arr_type.value,
             time_since_last=time_since_last,
             revisit_timeout=target.item_revisit_timeout_s,
             **logging_ids,
+            **target.logging_ids(),
+            **target_state.logging_ids(),
+            **item_logging_ids,
           )
           skips_total.labels(target=target.name, type=target.arr_type.value).inc()
           continue
@@ -307,14 +307,15 @@ class Scheduler:
           target=target,
           logging_ids=logging_ids,
         )
-        request_duration = time.time() - request_start
+        request_end = time.time()
+        request_duration = request_end - request_start
         request_duration_seconds.labels(target=target.name, type=target.arr_type.value).observe(
           request_duration
         )
 
         target_state.items[item_id_str] = ItemState(
           item_id=item_id_str,
-          last_processed_timestamp=now,
+          last_processed_timestamp=request_end,
           last_result="search_triggered",
           last_status="success",
         )
@@ -324,29 +325,31 @@ class Scheduler:
         ops_count += 1
         logger.debug(
           "Item processed successfully",
-          target_name=target.name,
-          target_type=target.arr_type.value,
           processed=processed,
           ops_count=ops_count,
           **logging_ids,
+          **target.logging_ids(),
+          **target_state.logging_ids(),
+          **item_logging_ids,
         )
       except Exception as e:
-        logger.warning(
-          "Search failed for item",
-          target_name=target.name,
-          target_type=target.arr_type.value,
-          error=str(e)[:100],
+        logger.exception(
+          "Exception while processing item",
+          exception=e,
           **logging_ids,
+          **target.logging_ids(),
+          **target_state.logging_ids(),
+          **item_logging_ids,
         )
         request_errors_total.labels(target=target.name, type=target.arr_type.value).inc()
 
     logger.debug(
       "Finished processing items",
-      target=target.name,
-      type=target.arr_type.value,
       processed=processed,
       total_items=len(items),
       **logging_ids,
+      **target.logging_ids(),
+      **target_state.logging_ids(),
     )
     return processed
 
@@ -354,46 +357,51 @@ class Scheduler:
 class MovieHandler:
   """Handler for processing movies."""
 
-  def extract_item_id(self, item: dict[str, Any]) -> ItemId | None:
+  def extract_item_id(self, item: dict[str, Any]) -> MovieId | None:
     """Extract item ID for state tracking."""
     movie_id = item.get("id")
     if movie_id is None:
       return None
-    return MovieId(movie_id=movie_id)
+
+    movie_name = item.get("title")
+    return MovieId(movie_id=movie_id, movie_name=movie_name)
 
   def extract_logging_id(self, item: dict[str, Any]) -> dict[str, str]:
     """Extract logging identifiers."""
-    movie_id = item.get("id")
+    item_id = self.extract_item_id(item)
+    if item_id is None:
+      return {}
+
+    movie_id = item_id.movie_id
+    movie_name = item.get("title")
+
     return {
-      "movie_id": str(movie_id) if movie_id is not None else "",
-      "item_identifier": f"movie_id={movie_id}" if movie_id is not None else "movie_id=None",
+      "movie_id": str(movie_id),
+      "movie_name": movie_name if movie_name is not None else "None",
     }
 
   async def search(
     self,
     client: ArrClient,
     item: dict[str, Any],
-    target: ArrTarget,
-    run_id: str,
+    logging_ids: dict[str, str],
   ) -> None:
     """Trigger search for a movie and log the action."""
 
-    movie_id = item.get("id")
-    if movie_id is None:
+    item_id = self.extract_item_id(item)
+    if item_id is None:
       raise ValueError("Movie ID is required")
 
-    logging_ids = self.extract_logging_id(item)
+    item_logging_ids = self.extract_logging_id(item)
+    combined_logging_ids = {**logging_ids, **item_logging_ids}
+    await client.search_movie(item_id.movie_id, logging_ids=combined_logging_ids)
+
     log_movie_action(
       logger=logger,
-      action="Triggering search for item",
-      movie_id=int(logging_ids["movie_id"]),
-      target_name=target.name,
-      arr_type=target.arr_type,
-      run_id=run_id,
-      movie_name=item.get("title"),
-      item_identifier=logging_ids.get("item_identifier"),
+      action=Action.SEARCH_MOVIE,
+      movie_id=item_id,
+      **logging_ids,
     )
-    await client.search_movie(movie_id)
 
 
 class SeriesHandler:
@@ -404,48 +412,48 @@ class SeriesHandler:
   searches, but not season-specific or episode-specific searches.
   """
 
-  def extract_item_id(self, item: dict[str, Any]) -> ItemId | None:
+  def extract_item_id(self, item: dict[str, Any]) -> SeriesId | None:
     """Extract item ID for state tracking."""
     series_id = item.get("id")
     if series_id is None:
       return None
 
-    return SeriesId(series_id=series_id)
+    series_name = item.get("title")
+    return SeriesId(series_id=series_id, series_name=series_name)
 
   def extract_logging_id(self, item: dict[str, Any]) -> dict[str, str]:
     """Extract logging identifiers."""
-    id = self.extract_item_id(item)
-    if id is None:
+    item_id = self.extract_item_id(item)
+    if item_id is None:
       return {}
+
+    series_name = item.get("title")
+
     return {
-      "series_id": str(id.series_id),
+      "series_id": str(item_id.series_id),
+      "series_name": series_name if series_name is not None else "None",
     }
 
   async def search(
     self,
     client: ArrClient,
     item: dict[str, Any],
-    target: ArrTarget,
-    run_id: str,
+    logging_ids: dict[str, str],
   ) -> None:
     """Trigger search for a series and log the action."""
-    series_id = item.get("id")
+
+    series_id = self.extract_item_id(item)
     if series_id is None:
       raise ValueError("Series ID is required")
-    # For series-wide searches, season_id is None
-    # If we need season-specific operations in the future, extract from item data
-    season_id: int | None = None
 
-    logging_ids = self.extract_logging_id(item)
+    item_logging_ids = self.extract_logging_id(item)
+    combined_logging_ids = {**logging_ids, **item_logging_ids}
+    await client.search_series(series_id.series_id, logging_ids=combined_logging_ids)
+
     log_series_action(
       logger=logger,
-      action="Triggering search for item",
-      series_id=int(logging_ids["series_id"]),
-      season_id=season_id,
-      target_name=target.name,
-      arr_type=target.arr_type,
-      run_id=run_id,
-      series_name=item.get("title"),
-      item_identifier=logging_ids.get("item_identifier"),
+      action=Action.SEARCH_SERIES,
+      series_id=series_id.series_id,
+      series_name=series_id.series_name,
+      **logging_ids,
     )
-    await client.search_series(series_id, season_id=season_id)
