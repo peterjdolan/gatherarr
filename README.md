@@ -11,18 +11,12 @@ Huntarrs are great, but when you need a calm, reliable, and simple helper, you n
 
 ## Minimal Deployment
 
-Clone the repository:
-
-```bash
-git clone https://github.com/peterjdolan/gatherarr.git
-```
-
 Create `docker-compose.yaml` in the parent directory and adjust hostnames/API keys for your environment:
 
 ```yaml
 services:
   gatherarr:
-    build: ./gatherarr
+    image: astrocatcmdr/gatherarr:latest
     container_name: gatherarr
     environment:
       GTH_ARR_0_TYPE: radarr
