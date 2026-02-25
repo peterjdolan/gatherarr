@@ -115,16 +115,17 @@ def create_target(
   **overrides: Any,
 ) -> ArrTarget:
   """Create an ArrTarget with common default values."""
-  return ArrTarget(
-    name=name,
-    arr_type=arr_type,
-    base_url="http://test",
-    api_key="key",
-    ops_per_interval=ops_per_interval,
-    interval_s=60,
-    item_revisit_timeout_s=3600,
-    **overrides,
-  )
+  target_kwargs: dict[str, Any] = {
+    "name": name,
+    "arr_type": arr_type,
+    "base_url": "http://test",
+    "api_key": "key",
+    "ops_per_interval": ops_per_interval,
+    "interval_s": 60,
+    "item_revisit_timeout_s": 3600,
+  }
+  target_kwargs.update(overrides)
+  return ArrTarget(**target_kwargs)
 
 
 def create_scheduler(
@@ -136,7 +137,7 @@ def create_scheduler(
   from app.arr_client import ArrClient
 
   # Fake clients are compatible with ArrClient interface for testing
-  arr_clients: dict[str, ArrClient] = {target.name: fake_client}  # type: ignore[dict-item]
+  arr_clients: dict[str, ArrClient] = {target.name: fake_client}
   return Scheduler([target], state_manager, arr_clients)
 
 
