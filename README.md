@@ -10,13 +10,13 @@ Huntarrs are great, but when you need a calm, reliable, and simple helper, you l
 
 ## Minimal Deployment
 
-1: Clone the repository:
+Clone the repository:
 
 ```bash
 git clone https://github.com/peterjdolan/gatherarr.git
 ```
 
-2: Create `docker-compose.yaml` in the parent directory and adjust hostnames/API keys for your environment:
+Create `docker-compose.yaml` in the parent directory and adjust hostnames/API keys for your environment:
 
 ```yaml
 services:
@@ -35,7 +35,7 @@ services:
       GTH_ARR_1_APIKEY: FAKE_SONARR_API_KEY_REPLACE_ME
 ```
 
-3: Start Gatherarr:
+Start Gatherarr:
 
 ```bash
 docker compose up --build gatherarr
