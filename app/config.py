@@ -94,7 +94,7 @@ class Config(BaseSettings):
   state_file_path: str | None = "/data/state.yaml"
   ops_per_interval: int = Field(default=1, ge=1)
   interval_s: int = Field(default=60, ge=1)
-  item_revisit_s: int = Field(default=86400, ge=1)
+  item_revisit_s: int = Field(default=604800, ge=1)
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
 
   @field_validator("log_level")

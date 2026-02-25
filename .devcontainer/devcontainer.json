@@ -1,10 +1,12 @@
 {
   "name": "Gatherarr",
-  "build": {
-    "dockerfile": "../Dockerfile.devcontainer",
-    "context": ".."
+  "image": "mcr.microsoft.com/devcontainers/python:3.14",
+  "features": {
+    "ghcr.io/devcontainers-contrib/features/uv:1": {}
   },
-  "forwardPorts": [9090],
+  "forwardPorts": [
+    9090
+  ],
   "portsAttributes": {
     "9090": {
       "label": "Metrics Server",
@@ -13,34 +15,28 @@
   },
   "postCreateCommand": "uv sync --all-extras",
   "remoteUser": "vscode",
-  "workspaceFolder": "/workspace",
   "customizations": {
     "vscode": {
       "extensions": [
+        "astral-sh.uv",
         "charliermarsh.ruff",
-        "davidanson.vscode-markdownlint",
-        "eamodio.gitlens",
-        "esbenp.prettier-vscode",
-        "github.vscode-github-actions",
-        "github.vscode-pull-request-github",
-        "ms-azuretools.vscode-docker",
-        "ms-python.debugpy",
-        "ms-python.mypy-type-checker",
         "ms-python.python",
         "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "ms-python.mypy-type-checker",
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github",
+        "eamodio.gitlens",
+        "esbenp.prettier-vscode",
         "redhat.vscode-yaml",
-        "usernamehw.errorlens"
+        "usernamehw.errorlens",
+        "davidanson.vscode-markdownlint"
       ],
       "settings": {
         "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
         "python.terminal.activateEnvironment": true,
         "python.analysis.typeCheckingMode": "basic",
-        "python.analysis.extraPaths": ["${workspaceFolder}"],
         "python.analysis.diagnosticMode": "workspace",
-        "python.linting.enabled": true,
-        "python.linting.ruffEnabled": true,
-        "python.formatting.provider": "none",
-        "python.languageServer": "Pylance",
         "[python]": {
           "editor.defaultFormatter": "charliermarsh.ruff",
           "editor.formatOnSave": true,
@@ -48,50 +44,35 @@
             "source.fixAll": "explicit",
             "source.organizeImports": "explicit"
           },
-          "editor.rulers": [100]
+          "editor.rulers": [
+            100
+          ]
         },
+        "editor.formatOnSave": true,
         "[yaml]": {
-          "editor.defaultFormatter": "redhat.vscode-yaml",
-          "editor.formatOnSave": true
+          "editor.defaultFormatter": "redhat.vscode-yaml"
         },
         "[json]": {
-          "editor.defaultFormatter": "redhat.vscode-yaml",
-          "editor.formatOnSave": true
+          "editor.defaultFormatter": "vscode.json-language-features"
         },
         "[markdown]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode",
-          "editor.formatOnSave": true
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
         },
         "files.exclude": {
-          "**/__pycache__": true,
-          "**/*.pyc": true,
-          "**/.pytest_cache": true,
+          "**/.venv": true,
           "**/.mypy_cache": true,
+          "**/.vscode": true,
+          "**/gatherarr.egg-info": true,
+          "**/__pycache__": true,
+          "**/.pytest_cache": true,
           "**/.ruff_cache": true
         },
-        "files.watcherExclude": {
-          "**/.git/objects/**": true,
-          "**/.git/subtree-cache/**": true,
-          "**/node_modules/**": true,
-          "**/.venv/**": true,
-          "**/__pycache__/**": true,
-          "**/.pytest_cache/**": true,
-          "**/.mypy_cache/**": true,
-          "**/.ruff_cache/**": true
-        },
-        "terminal.integrated.defaultProfile.linux": "bash",
-        "terminal.integrated.env.linux": {
-          "PYTHONPATH": "${workspaceFolder}"
-        }
+        "terminal.integrated.defaultProfile.linux": "zsh"
       }
     }
   },
-  "mounts": ["source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"],
   "remoteEnv": {
-    "PYTHONPATH": "/workspace",
-    "UV_LINK_MODE": "copy"
-  },
-  "features": {
-    "ghcr.io/devcontainers/features/git:1": {}
+    "UV_LINK_MODE": "copy",
+    "UV_PYTHON_PREFERENCE": "only-managed"
   }
 }

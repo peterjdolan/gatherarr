@@ -2,7 +2,7 @@
 name = "gatherarr"
 version = "0.1.0"
 description = "A minimal worker-style Arr search runner (initial skeleton)."
-requires-python = ">=3.13,<3.14"
+requires-python = "==3.14.*"
 license = { text = "MIT" }
 dependencies = [
   "flask>=3.0.0",
@@ -39,7 +39,7 @@ test = "pytest tests --ignore=tests/integration"
 test-e2e = "pytest tests/integration"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 100
 indent-width = 2
 
@@ -53,7 +53,7 @@ indent-style = "space"
 known-first-party = ["app"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
