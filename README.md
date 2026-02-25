@@ -9,20 +9,12 @@ Huntarrs are great, but when you need a calm, reliable, and simple helper, you n
 - **Configuration model:** Environment variables only. `.env` files and Docker Secrets may be used to manage configuration and API keys.
 - **Security model:** No sensitive information written to disk or emitted in logs. No outgoing network requests except to the configured *arr servers. No telemetry or monitoring.
 
-## Minimal Deployment
-
-Clone the repository:
-
-```bash
-git clone https://github.com/peterjdolan/gatherarr.git
-```
-
-Create `docker-compose.yaml` in the parent directory and adjust hostnames/API keys for your environment:
+## Minimal Deployment with Docker Compose
 
 ```yaml
 services:
   gatherarr:
-    build: ./gatherarr
+    image: astrocatcmdr/gatherarr:latest
     container_name: gatherarr
     environment:
       GTH_ARR_0_TYPE: radarr
@@ -35,11 +27,7 @@ services:
       GTH_ARR_1_APIKEY: FAKE_SONARR_API_KEY_REPLACE_ME
 ```
 
-Start Gatherarr:
-
-```bash
-docker compose up --build gatherarr
-```
+To manage more complex configurations, Docker `.env` files may be used. To securely handle sensitive API keys, Docker Secrets may be used.
 
 ## Configuration
 
