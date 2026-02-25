@@ -6,6 +6,7 @@ import os
 import re
 from enum import StrEnum
 from pathlib import Path
+from typing import Any, TypeVar
 from urllib.parse import urlparse
 
 import structlog
@@ -13,6 +14,23 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = structlog.get_logger()
+_OverrideValue = TypeVar("_OverrideValue")
+
+_TARGET_OVERRIDE_ENV_MAP: tuple[tuple[str, str], ...] = (
+  ("OPS_PER_INTERVAL", "ops_per_interval"),
+  ("INTERVAL_S", "interval_s"),
+  ("ITEM_REVISIT_TIMEOUT_S", "item_revisit_timeout_s"),
+  ("REQUIRE_MONITORED", "require_monitored"),
+  ("REQUIRE_CUTOFF_UNMET", "require_cutoff_unmet"),
+  ("RELEASED_ONLY", "released_only"),
+  ("SEARCH_BACKOFF_S", "search_backoff_s"),
+  ("MAX_SEARCHES_PER_ITEM_PER_DAY", "max_searches_per_item_per_day"),
+  ("DRY_RUN", "dry_run"),
+  ("INCLUDE_TAGS", "include_tags"),
+  ("EXCLUDE_TAGS", "exclude_tags"),
+  ("MIN_MISSING_EPISODES", "min_missing_episodes"),
+  ("MIN_MISSING_PERCENT", "min_missing_percent"),
+)
 
 
 def _parse_csv_tags(value: str) -> list[str]:
@@ -28,6 +46,64 @@ def _parse_csv_tags(value: str) -> list[str]:
     seen.add(normalized_tag)
     tags.append(normalized_tag)
   return tags
+
+
+def _resolve_override_value(
+  override_value: _OverrideValue | None, default_value: _OverrideValue
+) -> _OverrideValue:
+  """Resolve an optional override value against a default."""
+  return default_value if override_value is None else override_value
+
+
+def _collect_target_override_data(env_dict: dict[str, str], index: int) -> dict[str, str]:
+  """Collect raw target override values from environment."""
+  override_data: dict[str, str] = {}
+  target_prefix = f"GTH_ARR_{index}_"
+  for env_suffix, override_field in _TARGET_OVERRIDE_ENV_MAP:
+    env_key = f"{target_prefix}{env_suffix}"
+    env_value = env_dict.get(env_key)
+    if env_value is not None:
+      override_data[override_field] = env_value
+  return override_data
+
+
+def _build_target_settings(
+  base_config: "Config", overrides: "TargetOverrideSettings"
+) -> dict[str, Any]:
+  """Build resolved target settings from defaults and per-target overrides."""
+  include_tags_raw = _resolve_override_value(overrides.include_tags, base_config.include_tags)
+  exclude_tags_raw = _resolve_override_value(overrides.exclude_tags, base_config.exclude_tags)
+  return {
+    "ops_per_interval": _resolve_override_value(
+      overrides.ops_per_interval, base_config.ops_per_interval
+    ),
+    "interval_s": _resolve_override_value(overrides.interval_s, base_config.interval_s),
+    "item_revisit_timeout_s": _resolve_override_value(
+      overrides.item_revisit_timeout_s, base_config.item_revisit_s
+    ),
+    "require_monitored": _resolve_override_value(
+      overrides.require_monitored, base_config.require_monitored
+    ),
+    "require_cutoff_unmet": _resolve_override_value(
+      overrides.require_cutoff_unmet, base_config.require_cutoff_unmet
+    ),
+    "released_only": _resolve_override_value(overrides.released_only, base_config.released_only),
+    "search_backoff_s": _resolve_override_value(
+      overrides.search_backoff_s, base_config.search_backoff_s
+    ),
+    "max_searches_per_item_per_day": _resolve_override_value(
+      overrides.max_searches_per_item_per_day, base_config.max_searches_per_item_per_day
+    ),
+    "dry_run": _resolve_override_value(overrides.dry_run, base_config.dry_run),
+    "include_tags": _parse_csv_tags(include_tags_raw),
+    "exclude_tags": _parse_csv_tags(exclude_tags_raw),
+    "min_missing_episodes": _resolve_override_value(
+      overrides.min_missing_episodes, base_config.min_missing_episodes
+    ),
+    "min_missing_percent": _resolve_override_value(
+      overrides.min_missing_percent, base_config.min_missing_percent
+    ),
+  }
 
 
 class ArrType(StrEnum):
@@ -270,35 +346,7 @@ def load_config(env: dict[str, str] | None = None) -> Config:
         f"Invalid arr type: {env_dict[type_key]}. Must be one of: '{allowed_types}'"
       ) from e
 
-    override_data: dict[str, str] = {}
-    if f"GTH_ARR_{n}_OPS_PER_INTERVAL" in env_dict:
-      override_data["ops_per_interval"] = env_dict[f"GTH_ARR_{n}_OPS_PER_INTERVAL"]
-    if f"GTH_ARR_{n}_INTERVAL_S" in env_dict:
-      override_data["interval_s"] = env_dict[f"GTH_ARR_{n}_INTERVAL_S"]
-    if f"GTH_ARR_{n}_ITEM_REVISIT_TIMEOUT_S" in env_dict:
-      override_data["item_revisit_timeout_s"] = env_dict[f"GTH_ARR_{n}_ITEM_REVISIT_TIMEOUT_S"]
-    if f"GTH_ARR_{n}_REQUIRE_MONITORED" in env_dict:
-      override_data["require_monitored"] = env_dict[f"GTH_ARR_{n}_REQUIRE_MONITORED"]
-    if f"GTH_ARR_{n}_REQUIRE_CUTOFF_UNMET" in env_dict:
-      override_data["require_cutoff_unmet"] = env_dict[f"GTH_ARR_{n}_REQUIRE_CUTOFF_UNMET"]
-    if f"GTH_ARR_{n}_RELEASED_ONLY" in env_dict:
-      override_data["released_only"] = env_dict[f"GTH_ARR_{n}_RELEASED_ONLY"]
-    if f"GTH_ARR_{n}_SEARCH_BACKOFF_S" in env_dict:
-      override_data["search_backoff_s"] = env_dict[f"GTH_ARR_{n}_SEARCH_BACKOFF_S"]
-    if f"GTH_ARR_{n}_MAX_SEARCHES_PER_ITEM_PER_DAY" in env_dict:
-      override_data["max_searches_per_item_per_day"] = env_dict[
-        f"GTH_ARR_{n}_MAX_SEARCHES_PER_ITEM_PER_DAY"
-      ]
-    if f"GTH_ARR_{n}_DRY_RUN" in env_dict:
-      override_data["dry_run"] = env_dict[f"GTH_ARR_{n}_DRY_RUN"]
-    if f"GTH_ARR_{n}_INCLUDE_TAGS" in env_dict:
-      override_data["include_tags"] = env_dict[f"GTH_ARR_{n}_INCLUDE_TAGS"]
-    if f"GTH_ARR_{n}_EXCLUDE_TAGS" in env_dict:
-      override_data["exclude_tags"] = env_dict[f"GTH_ARR_{n}_EXCLUDE_TAGS"]
-    if f"GTH_ARR_{n}_MIN_MISSING_EPISODES" in env_dict:
-      override_data["min_missing_episodes"] = env_dict[f"GTH_ARR_{n}_MIN_MISSING_EPISODES"]
-    if f"GTH_ARR_{n}_MIN_MISSING_PERCENT" in env_dict:
-      override_data["min_missing_percent"] = env_dict[f"GTH_ARR_{n}_MIN_MISSING_PERCENT"]
+    override_data = _collect_target_override_data(env_dict, n)
 
     overrides = (
       TargetOverrideSettings.model_validate(override_data)
@@ -311,43 +359,7 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       arr_type=arr_type,
       base_url=env_dict[baseurl_key],
       api_key=env_dict[apikey_key],
-      ops_per_interval=overrides.ops_per_interval
-      if overrides.ops_per_interval is not None
-      else base_config.ops_per_interval,
-      interval_s=overrides.interval_s
-      if overrides.interval_s is not None
-      else base_config.interval_s,
-      item_revisit_timeout_s=overrides.item_revisit_timeout_s
-      if overrides.item_revisit_timeout_s is not None
-      else base_config.item_revisit_s,
-      require_monitored=overrides.require_monitored
-      if overrides.require_monitored is not None
-      else base_config.require_monitored,
-      require_cutoff_unmet=overrides.require_cutoff_unmet
-      if overrides.require_cutoff_unmet is not None
-      else base_config.require_cutoff_unmet,
-      released_only=overrides.released_only
-      if overrides.released_only is not None
-      else base_config.released_only,
-      search_backoff_s=overrides.search_backoff_s
-      if overrides.search_backoff_s is not None
-      else base_config.search_backoff_s,
-      max_searches_per_item_per_day=overrides.max_searches_per_item_per_day
-      if overrides.max_searches_per_item_per_day is not None
-      else base_config.max_searches_per_item_per_day,
-      dry_run=overrides.dry_run if overrides.dry_run is not None else base_config.dry_run,
-      include_tags=_parse_csv_tags(overrides.include_tags)
-      if overrides.include_tags is not None
-      else _parse_csv_tags(base_config.include_tags),
-      exclude_tags=_parse_csv_tags(overrides.exclude_tags)
-      if overrides.exclude_tags is not None
-      else _parse_csv_tags(base_config.exclude_tags),
-      min_missing_episodes=overrides.min_missing_episodes
-      if overrides.min_missing_episodes is not None
-      else base_config.min_missing_episodes,
-      min_missing_percent=overrides.min_missing_percent
-      if overrides.min_missing_percent is not None
-      else base_config.min_missing_percent,
+      **_build_target_settings(base_config, overrides),
     )
     logger.debug(
       "Target configuration created",
