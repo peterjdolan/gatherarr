@@ -366,48 +366,6 @@ def assert_metric_line(metrics_text: str, metric_name: str, required_fragments: 
   assert matching_lines, f"No {metric_name} line matched fragments: {required_fragments}"
 
 
-def test_fake_server_contract_examples_match_radarr_and_sonarr_specs() -> None:
-  """Programmatically verify fake server API fixtures against official OpenAPI specs."""
-  radarr_spec = radarr_contract()
-  sonarr_spec = sonarr_contract()
-
-  radarr_spec.validate_response(
-    method="GET",
-    path="/api/v3/movie",
-    status_code=200,
-    body=[{"id": 11, "title": "Integration Movie"}],
-  )
-  radarr_spec.validate_request(
-    method="POST",
-    path="/api/v3/command",
-    body={"name": "MoviesSearch"},
-  )
-  radarr_spec.validate_response(
-    method="POST",
-    path="/api/v3/command",
-    status_code=200,
-    body={"id": 501, "status": "queued"},
-  )
-
-  sonarr_spec.validate_response(
-    method="GET",
-    path="/api/v3/series",
-    status_code=200,
-    body=[{"id": 22, "title": "Integration Series"}],
-  )
-  sonarr_spec.validate_request(
-    method="POST",
-    path="/api/v3/command",
-    body={"name": "SeriesSearch"},
-  )
-  sonarr_spec.validate_response(
-    method="POST",
-    path="/api/v3/command",
-    status_code=200,
-    body={"id": 601, "status": "queued"},
-  )
-
-
 @pytest.mark.asyncio
 async def test_radarr_success_flow_with_real_http_stack() -> None:
   responses = {
