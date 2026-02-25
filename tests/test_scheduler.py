@@ -27,11 +27,16 @@ class FakeArrClient:
 
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_movies_called = True
-    return [{"id": 1, "title": "Movie 1"}, {"id": 2, "title": "Movie 2"}]
+    return [
+      {"id": 1, "title": "Movie 1", "monitored": True, "hasFile": False},
+      {"id": 2, "title": "Movie 2", "monitored": True, "movieFile": {"qualityCutoffNotMet": True}},
+    ]
 
   async def get_series(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_series_called = True
-    return [{"id": 1, "title": "Series 1"}]
+    return [
+      {"id": 1, "title": "Series 1", "monitored": True, "statistics": {"qualityCutoffNotMet": True}}
+    ]
 
   async def search_movie(self, movie_id: Any, logging_ids: dict[str, Any]) -> dict:
     self.search_movie_called = True
@@ -55,6 +60,25 @@ class FakeClientWithError:
 
   async def get_series(self, logging_ids: dict[str, Any]) -> list[dict]:
     raise RuntimeError("API error")
+
+
+class FakeClientWithIneligibleItems(FakeArrClient):
+  """Fake client that returns items that should not be searched."""
+
+  async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
+    self.get_movies_called = True
+    return [{"id": 1, "title": "Movie 1", "monitored": False, "hasFile": False}]
+
+  async def get_series(self, logging_ids: dict[str, Any]) -> list[dict]:
+    self.get_series_called = True
+    return [
+      {
+        "id": 1,
+        "title": "Series 1",
+        "monitored": True,
+        "statistics": {"episodeFileCount": 10, "totalEpisodeCount": 10},
+      }
+    ]
 
 
 @pytest.fixture
@@ -173,3 +197,25 @@ class TestScheduler:
     target_state = state_manager.get_target_state("test")
     assert target_state.last_status == RunStatus.ERROR
     assert target_state.consecutive_failures == 1
+
+  @pytest.mark.asyncio
+  async def test_run_once_skips_ineligible_movie(self, state_manager: StateManager) -> None:
+    target = create_target("test-radarr", ArrType.RADARR)
+    fake_client = FakeClientWithIneligibleItems(target)
+    scheduler = create_scheduler(target, state_manager, fake_client)
+
+    await scheduler.run_once(target)
+
+    assert fake_client.get_movies_called
+    assert not fake_client.search_movie_called
+
+  @pytest.mark.asyncio
+  async def test_run_once_skips_series_when_cutoff_met(self, state_manager: StateManager) -> None:
+    target = create_target("test-sonarr", ArrType.SONARR)
+    fake_client = FakeClientWithIneligibleItems(target)
+    scheduler = create_scheduler(target, state_manager, fake_client)
+
+    await scheduler.run_once(target)
+
+    assert fake_client.get_series_called
+    assert not fake_client.search_series_called

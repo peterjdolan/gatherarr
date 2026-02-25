@@ -105,6 +105,10 @@ class ItemHandler(Protocol):
     """
     ...
 
+  def should_search(self, item: dict[str, Any]) -> bool:
+    """Return True when the item meets the handler search criteria."""
+    ...
+
   async def search(
     self,
     client: ArrClient,
@@ -317,6 +321,14 @@ class Scheduler:
           skips_total.labels(target=target.name, type=target.arr_type.value).inc()
           continue
 
+      if not item_handler.should_search(item):
+        logger.debug(
+          "Skipping item (search criteria not met)",
+          **item_logging_ids,
+        )
+        skips_total.labels(target=target.name, type=target.arr_type.value).inc()
+        continue
+
       try:
         request_start = time.time()
         requests_total.labels(target=target.name, type=target.arr_type.value).inc()
@@ -368,6 +380,25 @@ class Scheduler:
 
 class MovieHandler:
   """Handler for processing movies."""
+
+  def should_search(self, item: dict[str, Any]) -> bool:
+    """Return True when movie is monitored and quality cutoff is unmet."""
+    monitored = item.get("monitored")
+    return monitored is True and self._is_cutoff_unmet(item)
+
+  def _is_cutoff_unmet(self, item: dict[str, Any]) -> bool:
+    """Determine whether Radarr quality cutoff has not been reached."""
+    movie_file = item.get("movieFile")
+    if isinstance(movie_file, dict):
+      quality_cutoff_not_met = movie_file.get("qualityCutoffNotMet")
+      if isinstance(quality_cutoff_not_met, bool):
+        return quality_cutoff_not_met
+
+    has_file = item.get("hasFile")
+    if isinstance(has_file, bool):
+      return not has_file
+
+    return False
 
   def extract_item_id(self, item: dict[str, Any]) -> MovieId | None:
     """Extract item ID for state tracking."""
@@ -423,6 +454,39 @@ class SeriesHandler:
   It also triggers the search for the series and logs the action. It is used to handle series-wide
   searches, but not season-specific or episode-specific searches.
   """
+
+  def should_search(self, item: dict[str, Any]) -> bool:
+    """Return True when series is monitored and quality cutoff is unmet."""
+    monitored = item.get("monitored")
+    return monitored is True and self._is_cutoff_unmet(item)
+
+  def _is_cutoff_unmet(self, item: dict[str, Any]) -> bool:
+    """Determine whether Sonarr quality cutoff has not been reached."""
+    statistics = item.get("statistics")
+    if not isinstance(statistics, dict):
+      return False
+
+    quality_cutoff_not_met = statistics.get("qualityCutoffNotMet")
+    if isinstance(quality_cutoff_not_met, bool):
+      return quality_cutoff_not_met
+
+    episode_file_count = statistics.get("episodeFileCount")
+    total_episode_count = statistics.get("totalEpisodeCount")
+    if (
+      isinstance(episode_file_count, int)
+      and not isinstance(episode_file_count, bool)
+      and isinstance(total_episode_count, int)
+      and not isinstance(total_episode_count, bool)
+    ):
+      return episode_file_count < total_episode_count
+
+    percent_of_episodes = statistics.get("percentOfEpisodes")
+    if isinstance(percent_of_episodes, float):
+      return percent_of_episodes < 100.0
+    if isinstance(percent_of_episodes, int) and not isinstance(percent_of_episodes, bool):
+      return percent_of_episodes < 100
+
+    return False
 
   def extract_item_id(self, item: dict[str, Any]) -> SeriesId | None:
     """Extract item ID for state tracking."""

@@ -48,6 +48,55 @@ class TestMovieHandler:
     movie_id = MovieId(movie_id=42, movie_name="Test Movie")
     assert movie_id.format_for_state() == "42"
 
+  def test_should_search_when_monitored_and_cutoff_unmet(self) -> None:
+    """Search when monitored and quality cutoff is unmet."""
+    handler = MovieHandler()
+    item = {
+      "id": 42,
+      "title": "Test Movie",
+      "monitored": True,
+      "movieFile": {"qualityCutoffNotMet": True},
+    }
+
+    assert handler.should_search(item) is True
+
+  def test_should_not_search_when_not_monitored(self) -> None:
+    """Do not search when movie is not monitored."""
+    handler = MovieHandler()
+    item = {
+      "id": 42,
+      "title": "Test Movie",
+      "monitored": False,
+      "movieFile": {"qualityCutoffNotMet": True},
+    }
+
+    assert handler.should_search(item) is False
+
+  def test_should_not_search_when_cutoff_met(self) -> None:
+    """Do not search when quality cutoff is already met."""
+    handler = MovieHandler()
+    item = {
+      "id": 42,
+      "title": "Test Movie",
+      "monitored": True,
+      "movieFile": {"qualityCutoffNotMet": False},
+      "hasFile": True,
+    }
+
+    assert handler.should_search(item) is False
+
+  def test_should_search_when_no_file_present(self) -> None:
+    """Treat movies with no file as cutoff unmet."""
+    handler = MovieHandler()
+    item = {
+      "id": 42,
+      "title": "Test Movie",
+      "monitored": True,
+      "hasFile": False,
+    }
+
+    assert handler.should_search(item) is True
+
 
 class TestSeriesHandler:
   def test_extract_item_id_with_id(self) -> None:
@@ -92,3 +141,51 @@ class TestSeriesHandler:
     """Test SeriesId.format_for_state returns string representation."""
     series_id = SeriesId(series_id=123, series_name="Test Series")
     assert series_id.format_for_state() == "123"
+
+  def test_should_search_when_monitored_and_cutoff_unmet(self) -> None:
+    """Search when monitored and quality cutoff is unmet."""
+    handler = SeriesHandler()
+    item = {
+      "id": 123,
+      "title": "Test Series",
+      "monitored": True,
+      "statistics": {"qualityCutoffNotMet": True},
+    }
+
+    assert handler.should_search(item) is True
+
+  def test_should_not_search_when_not_monitored(self) -> None:
+    """Do not search when series is not monitored."""
+    handler = SeriesHandler()
+    item = {
+      "id": 123,
+      "title": "Test Series",
+      "monitored": False,
+      "statistics": {"qualityCutoffNotMet": True},
+    }
+
+    assert handler.should_search(item) is False
+
+  def test_should_search_with_episode_coverage_fallback(self) -> None:
+    """Use episode coverage when qualityCutoffNotMet is unavailable."""
+    handler = SeriesHandler()
+    item = {
+      "id": 123,
+      "title": "Test Series",
+      "monitored": True,
+      "statistics": {"episodeFileCount": 8, "totalEpisodeCount": 10},
+    }
+
+    assert handler.should_search(item) is True
+
+  def test_should_not_search_when_cutoff_met(self) -> None:
+    """Do not search when series appears complete at target quality."""
+    handler = SeriesHandler()
+    item = {
+      "id": 123,
+      "title": "Test Series",
+      "monitored": True,
+      "statistics": {"episodeFileCount": 10, "totalEpisodeCount": 10},
+    }
+
+    assert handler.should_search(item) is False
