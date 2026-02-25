@@ -16,6 +16,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "jsonschema>=4.26.0",
   "mypy>=1.7.0",
   "poethepoet>=0.24.0",
   "pytest>=7.4.0",

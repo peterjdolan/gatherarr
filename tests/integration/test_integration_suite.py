@@ -5,12 +5,14 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterator
 
 import httpx
 import pytest
+from jsonschema import Draft7Validator, FormatChecker, ValidationError
 
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
@@ -21,6 +23,196 @@ from app.state import FileStateStorage, RunStatus, StateManager
 
 RouteKey = tuple[str, str]
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RADARR_SPEC_PATH = REPO_ROOT / "context" / "radarr_api.json"
+SONARR_SPEC_PATH = REPO_ROOT / "context" / "sonarr_api.json"
+
+
+@lru_cache(maxsize=2)
+def load_openapi_document(spec_path: Path) -> dict[str, Any]:
+  """Load and cache an OpenAPI document."""
+  with spec_path.open("r", encoding="utf-8") as spec_file:
+    spec_document = json.load(spec_file)
+  if not isinstance(spec_document, dict):
+    raise AssertionError(f"OpenAPI document at {spec_path} must be a JSON object")
+  return spec_document
+
+
+def resolve_json_ref(document: dict[str, Any], ref: str) -> dict[str, Any]:
+  """Resolve a local JSON pointer reference."""
+  if not ref.startswith("#/"):
+    raise AssertionError(f"Only local refs are supported, got: {ref}")
+
+  node: Any = document
+  for raw_part in ref[2:].split("/"):
+    part = raw_part.replace("~1", "/").replace("~0", "~")
+    if not isinstance(node, dict) or part not in node:
+      raise AssertionError(f"Could not resolve ref {ref}")
+    node = node[part]
+
+  if not isinstance(node, dict):
+    raise AssertionError(f"Resolved ref {ref} did not produce an object schema")
+  return node
+
+
+def resolve_openapi_schema(document: dict[str, Any], schema_fragment: Any) -> Any:
+  """Resolve refs and normalize OpenAPI schema fragments into JSON Schema."""
+  if isinstance(schema_fragment, list):
+    return [resolve_openapi_schema(document, item) for item in schema_fragment]
+
+  if not isinstance(schema_fragment, dict):
+    return schema_fragment
+
+  if "$ref" in schema_fragment:
+    resolved_fragment = resolve_json_ref(document, str(schema_fragment["$ref"]))
+    sibling_keys = {key: value for key, value in schema_fragment.items() if key != "$ref"}
+    merged_fragment = {
+      **resolve_openapi_schema(document, resolved_fragment),
+      **resolve_openapi_schema(document, sibling_keys),
+    }
+    return merged_fragment
+
+  normalized_fragment = {
+    key: resolve_openapi_schema(document, value) for key, value in schema_fragment.items()
+  }
+
+  if normalized_fragment.get("nullable") is True:
+    current_type = normalized_fragment.get("type")
+    if isinstance(current_type, str):
+      normalized_fragment["type"] = [current_type, "null"]
+    elif isinstance(current_type, list) and "null" not in current_type:
+      normalized_fragment["type"] = [*current_type, "null"]
+    normalized_fragment.pop("nullable")
+
+  normalized_fragment.pop("readOnly", None)
+  normalized_fragment.pop("writeOnly", None)
+  normalized_fragment.pop("example", None)
+  normalized_fragment.pop("examples", None)
+  normalized_fragment.pop("deprecated", None)
+  return normalized_fragment
+
+
+def first_content_schema(operation_section: dict[str, Any]) -> dict[str, Any]:
+  """Select the schema from an OpenAPI content section."""
+  if "application/json" in operation_section:
+    media_type = operation_section["application/json"]
+  elif "text/json" in operation_section:
+    media_type = operation_section["text/json"]
+  elif "text/plain" in operation_section:
+    media_type = operation_section["text/plain"]
+  else:
+    available_types = ", ".join(sorted(operation_section.keys()))
+    raise AssertionError(f"No supported media type found. Available: {available_types}")
+
+  schema = media_type.get("schema")
+  if not isinstance(schema, dict):
+    raise AssertionError("Expected media type schema to be an object")
+  return schema
+
+
+def format_validation_error(error: ValidationError) -> str:
+  """Format jsonschema validation errors for assertions."""
+  path_tokens = [str(token) for token in error.absolute_path]
+  path = ".".join(path_tokens) if path_tokens else "<root>"
+  return f"{error.message} at {path}"
+
+
+class OpenApiContract:
+  """OpenAPI contract helper for fake server validation."""
+
+  def __init__(self, service_name: str, spec_path: Path) -> None:
+    self.service_name = service_name
+    self.spec_path = spec_path
+    self.document = load_openapi_document(spec_path)
+
+  def operation(self, method: str, path: str) -> dict[str, Any]:
+    """Get an operation definition for a method/path pair."""
+    paths = self.document.get("paths")
+    if not isinstance(paths, dict):
+      raise AssertionError(f"{self.service_name} spec missing paths object")
+    if path not in paths:
+      raise AssertionError(f"{self.service_name} spec missing path: {path}")
+
+    path_item = paths[path]
+    if not isinstance(path_item, dict):
+      raise AssertionError(f"{self.service_name} path item must be an object: {path}")
+    method_lower = method.lower()
+    if method_lower not in path_item:
+      raise AssertionError(f"{self.service_name} spec missing method {method} for path {path}")
+
+    operation = path_item[method_lower]
+    if not isinstance(operation, dict):
+      raise AssertionError(f"{self.service_name} operation must be an object for {method} {path}")
+    return operation
+
+  def validate_response(self, method: str, path: str, status_code: int, body: Any) -> None:
+    """Validate a response body against the operation's OpenAPI response schema."""
+    operation = self.operation(method, path)
+    responses = operation.get("responses")
+    if not isinstance(responses, dict):
+      raise AssertionError(
+        f"{self.service_name} operation has no responses object for {method} {path}"
+      )
+
+    response_key = str(status_code)
+    if response_key not in responses:
+      raise AssertionError(
+        f"{self.service_name} spec missing response {status_code} for {method} {path}"
+      )
+    response_definition = responses[response_key]
+    if not isinstance(response_definition, dict):
+      raise AssertionError(
+        f"{self.service_name} response definition must be object for {method} {path}"
+      )
+
+    content = response_definition.get("content")
+    if not isinstance(content, dict):
+      raise AssertionError(
+        f"{self.service_name} response {status_code} for {method} {path} has no content"
+      )
+    schema_fragment = first_content_schema(content)
+    schema = resolve_openapi_schema(self.document, schema_fragment)
+
+    validator = Draft7Validator(schema=schema, format_checker=FormatChecker())
+    errors = sorted(validator.iter_errors(body), key=lambda error: list(error.absolute_path))
+    if errors:
+      formatted_error = format_validation_error(errors[0])
+      raise AssertionError(
+        f"{self.service_name} response contract mismatch for {method} {path} {status_code}: "
+        f"{formatted_error}"
+      )
+
+  def validate_request(self, method: str, path: str, body: Any) -> None:
+    """Validate a request body against the operation's OpenAPI request schema."""
+    operation = self.operation(method, path)
+    request_body = operation.get("requestBody")
+    if not isinstance(request_body, dict):
+      raise AssertionError(f"{self.service_name} operation has no requestBody for {method} {path}")
+
+    content = request_body.get("content")
+    if not isinstance(content, dict):
+      raise AssertionError(f"{self.service_name} requestBody has no content for {method} {path}")
+    schema_fragment = first_content_schema(content)
+    schema = resolve_openapi_schema(self.document, schema_fragment)
+
+    validator = Draft7Validator(schema=schema, format_checker=FormatChecker())
+    errors = sorted(validator.iter_errors(body), key=lambda error: list(error.absolute_path))
+    if errors:
+      formatted_error = format_validation_error(errors[0])
+      raise AssertionError(
+        f"{self.service_name} request contract mismatch for {method} {path}: {formatted_error}"
+      )
+
+
+def radarr_contract() -> OpenApiContract:
+  """Get the Radarr OpenAPI contract."""
+  return OpenApiContract("radarr", RADARR_SPEC_PATH)
+
+
+def sonarr_contract() -> OpenApiContract:
+  """Get the Sonarr OpenAPI contract."""
+  return OpenApiContract("sonarr", SONARR_SPEC_PATH)
+
 
 @dataclass(frozen=True)
 class ResponseSpec:
@@ -29,6 +221,7 @@ class ResponseSpec:
   status_code: int
   body: Any
   delay_s: float = 0.0
+  enforce_contract: bool = True
 
 
 @dataclass(frozen=True)
@@ -43,12 +236,31 @@ class CapturedRequest:
 class FakeArrServer:
   """In-process fake Arr HTTP server for integration testing."""
 
-  def __init__(self, responses: dict[RouteKey, list[ResponseSpec]]) -> None:
+  def __init__(
+    self,
+    api_contract: OpenApiContract,
+    responses: dict[RouteKey, list[ResponseSpec]],
+  ) -> None:
+    self._api_contract = api_contract
     self._responses = {route: list(route_responses) for route, route_responses in responses.items()}
     self._captured_requests: list[CapturedRequest] = []
     self._lock = threading.Lock()
     self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._build_handler())
     self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+    self._validate_configured_contract()
+
+  def _validate_configured_contract(self) -> None:
+    """Validate fake server response fixtures against OpenAPI contracts."""
+    for (method, path), configured_responses in self._responses.items():
+      self._api_contract.operation(method, path)
+      for response in configured_responses:
+        if response.enforce_contract:
+          self._api_contract.validate_response(
+            method=method,
+            path=path,
+            status_code=response.status_code,
+            body=response.body,
+          )
 
   def _build_handler(self) -> type[BaseHTTPRequestHandler]:
     parent = self
@@ -138,10 +350,11 @@ class FakeArrServer:
 
 @contextmanager
 def running_fake_arr_server(
+  api_contract: OpenApiContract,
   responses: dict[RouteKey, list[ResponseSpec]],
 ) -> Iterator[FakeArrServer]:
   """Run a fake Arr server for the duration of the context."""
-  server = FakeArrServer(responses)
+  server = FakeArrServer(api_contract, responses)
   server.start()
   try:
     yield server
@@ -172,6 +385,48 @@ def assert_metric_line(metrics_text: str, metric_name: str, required_fragments: 
   assert matching_lines, f"No {metric_name} line matched fragments: {required_fragments}"
 
 
+def test_fake_server_contract_examples_match_radarr_and_sonarr_specs() -> None:
+  """Programmatically verify fake server API fixtures against official OpenAPI specs."""
+  radarr_spec = radarr_contract()
+  sonarr_spec = sonarr_contract()
+
+  radarr_spec.validate_response(
+    method="GET",
+    path="/api/v3/movie",
+    status_code=200,
+    body=[{"id": 11, "title": "Integration Movie"}],
+  )
+  radarr_spec.validate_request(
+    method="POST",
+    path="/api/v3/command",
+    body={"name": "MoviesSearch"},
+  )
+  radarr_spec.validate_response(
+    method="POST",
+    path="/api/v3/command",
+    status_code=200,
+    body={"id": 501, "status": "queued"},
+  )
+
+  sonarr_spec.validate_response(
+    method="GET",
+    path="/api/v3/series",
+    status_code=200,
+    body=[{"id": 22, "title": "Integration Series"}],
+  )
+  sonarr_spec.validate_request(
+    method="POST",
+    path="/api/v3/command",
+    body={"name": "SeriesSearch"},
+  )
+  sonarr_spec.validate_response(
+    method="POST",
+    path="/api/v3/command",
+    status_code=200,
+    body={"id": 601, "status": "queued"},
+  )
+
+
 @pytest.mark.asyncio
 async def test_radarr_success_flow_with_real_http_stack() -> None:
   responses = {
@@ -183,7 +438,7 @@ async def test_radarr_success_flow_with_real_http_stack() -> None:
     ],
   }
 
-  with running_fake_arr_server(responses) as fake_server:
+  with running_fake_arr_server(radarr_contract(), responses) as fake_server:
     target = create_target("integration-radarr-success", ArrType.RADARR, fake_server.base_url, 1)
 
     async with httpx.AsyncClient() as async_http_client:
@@ -221,7 +476,7 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
     ],
   }
 
-  with running_fake_arr_server(responses) as fake_server:
+  with running_fake_arr_server(sonarr_contract(), responses) as fake_server:
     target = create_target("integration-sonarr-success", ArrType.SONARR, fake_server.base_url, 1)
 
     async with httpx.AsyncClient() as async_http_client:
@@ -252,11 +507,11 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
 async def test_non_retryable_4xx_error_does_not_retry() -> None:
   responses = {
     ("GET", "/api/v3/movie"): [
-      ResponseSpec(status_code=404, body={"message": "not_found"}),
+      ResponseSpec(status_code=404, body={"message": "not_found"}, enforce_contract=False),
     ],
   }
 
-  with running_fake_arr_server(responses) as fake_server:
+  with running_fake_arr_server(radarr_contract(), responses) as fake_server:
     target = create_target("integration-4xx", ArrType.RADARR, fake_server.base_url, 1)
 
     async with httpx.AsyncClient() as async_http_client:
@@ -279,12 +534,12 @@ async def test_non_retryable_4xx_error_does_not_retry() -> None:
 async def test_retryable_5xx_error_retries_then_succeeds() -> None:
   responses = {
     ("GET", "/api/v3/movie"): [
-      ResponseSpec(status_code=502, body={"message": "bad_gateway"}),
+      ResponseSpec(status_code=502, body={"message": "bad_gateway"}, enforce_contract=False),
       ResponseSpec(status_code=200, body=[{"id": 303, "title": "Recovered Movie"}]),
     ],
   }
 
-  with running_fake_arr_server(responses) as fake_server:
+  with running_fake_arr_server(radarr_contract(), responses) as fake_server:
     target = create_target("integration-5xx", ArrType.RADARR, fake_server.base_url, 1)
 
     async with httpx.AsyncClient() as async_http_client:
@@ -309,7 +564,7 @@ async def test_timeout_error_retries_then_raises() -> None:
     ],
   }
 
-  with running_fake_arr_server(responses) as fake_server:
+  with running_fake_arr_server(radarr_contract(), responses) as fake_server:
     target = create_target("integration-timeout", ArrType.RADARR, fake_server.base_url, 1)
 
     async with httpx.AsyncClient() as async_http_client:
@@ -339,7 +594,7 @@ async def test_scheduler_persists_and_recovers_state_from_previous_file(tmp_path
     ],
   }
 
-  with running_fake_arr_server(responses) as fake_server:
+  with running_fake_arr_server(radarr_contract(), responses) as fake_server:
     target = create_target("integration-state-recovery", ArrType.RADARR, fake_server.base_url, 1)
     state_manager = StateManager(FileStateStorage(state_file_path))
     state_manager.load()
@@ -391,7 +646,7 @@ async def test_metrics_endpoint_exposes_target_metrics_after_scheduler_run(tmp_p
   }
   state_file_path = tmp_path / "metrics-state.yaml"
 
-  with running_fake_arr_server(responses) as fake_server:
+  with running_fake_arr_server(radarr_contract(), responses) as fake_server:
     target = create_target("integration-metrics", ArrType.RADARR, fake_server.base_url, 1)
     state_manager = StateManager(FileStateStorage(state_file_path))
     state_manager.load()
