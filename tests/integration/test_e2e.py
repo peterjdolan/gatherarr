@@ -52,7 +52,7 @@ def build_openapi_response(status_code: int, body: Any) -> RequestsOpenAPIRespon
   """Build an openapi-core response adapter."""
   response = requests.Response()
   response.status_code = status_code
-  response.headers = {"Content-Type": OPENAPI_CONTENT_TYPE}
+  response.headers["Content-Type"] = OPENAPI_CONTENT_TYPE
   response._content = json.dumps(body).encode("utf-8")
   return RequestsOpenAPIResponse(response)
 
