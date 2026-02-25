@@ -19,17 +19,12 @@ This file provides repository-specific instructions for coding agents working in
 - Dependency manager and runner: `uv`.
 - Task runner: `poethepoet` (`poe` tasks in `pyproject.toml`).
 
-Setup:
-
-1. `uv sync --dev`
-1. `uv run poe check`
-
 ## Run Commands
 
 - Run app locally: `uv run python -m app`
+- Targeted tests: `uv run pytest tests/test_<area>.py`
 - Incremental quality gate: `uv run poe check`
 - Full quality gate: `uv run poe check-e2e`
-- Targeted tests: `uv run pytest tests/test_<area>.py`
 
 ## Architecture Rules
 
@@ -78,17 +73,13 @@ Setup:
 
 ### Running Code Checks
 
-- Always use `uv run poe check` to run all code quality checks. This command will:
-  - run linting with Ruff (auto-fixes issues),
-  - run tests with pytest,
-  - run type checking with mypy.
+- Always use `uv run poe check` to run base code quality checks (formatting/lint/type-check/base tests).
+- Always use `uv run poe check-e2e` when you need base checks plus integration tests.
 
 ### Running Tests
 
-- Always use `uv run poe test` to run the test suite. This will:
-  - run all pytest tests in the `tests/` directory,
-  - generate coverage reports (terminal, HTML, and XML),
-  - use verbose output for better visibility.
+- Use `uv run poe test` for base tests only (`tests/integration` is excluded).
+- Use `uv run poe test-e2e` for integration tests in `tests/integration`.
 
 ### Before Committing Code
 
@@ -96,7 +87,6 @@ Before suggesting code changes are complete:
 
 1. Run `uv run poe check` to ensure all checks pass.
 1. If checks fail, fix issues before proceeding.
-1. Ensure tests pass with `uv run poe test`.
 1. As a last check before a commit, ensure integration tests pass with `uv run poe test-e2e`.
 
 ## Additional Repository Guidance
