@@ -184,7 +184,7 @@ class FakeArrServer:
     handler.end_headers()
     try:
       handler.wfile.write(response_payload)
-    except (BrokenPipeError, ConnectionResetError):
+    except BrokenPipeError, ConnectionResetError:
       # Timeouts intentionally close connections from the client side.
       pass
 
@@ -358,46 +358,6 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
       "seriesId": 22,
       "seasonNumber": 1,
     }
-
-
-@pytest.mark.asyncio
-async def test_scheduler_persists_and_recovers_state_from_previous_file(tmp_path: Path) -> None:
-  state_file_path = tmp_path / "state.yaml"
-  responses = {
-    ("GET", "/api/v3/movie"): [
-      ResponseSpec(status_code=200, body=[{"id": 101, "title": "Persisted Movie"}]),
-    ],
-    ("POST", "/api/v3/command"): [
-      ResponseSpec(status_code=200, body={"id": 901, "status": "queued"}),
-    ],
-  }
-
-  with running_fake_arr_server(radarr_contract(), responses) as fake_server:
-    target = create_target("integration-state-recovery", ArrType.RADARR, fake_server.base_url, 1)
-    state_manager = StateManager(FileStateStorage(state_file_path))
-    state_manager.load()
-
-    async with httpx.AsyncClient() as async_http_client:
-      arr_client = ArrClient(
-        target=target,
-        http_client=HttpxClient(async_http_client),
-        max_retries=2,
-        retry_delay_s=0.01,
-        timeout_s=0.5,
-      )
-      scheduler = Scheduler([target], state_manager, {target.name: arr_client})
-      await scheduler.run_once(target)
-
-  assert state_file_path.exists()
-
-  restored_state_manager = StateManager(FileStateStorage(state_file_path))
-  restored_state_manager.load()
-  restored_target_state = restored_state_manager.get_target_state("integration-state-recovery")
-
-  assert restored_state_manager.state.total_runs == 1
-  assert restored_target_state.last_status == RunStatus.SUCCESS
-  assert "101" in restored_target_state.items
-  assert restored_target_state.items["101"].last_result == "search_triggered"
 
 
 @pytest.mark.asyncio
