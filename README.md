@@ -87,6 +87,7 @@ Configuration is done by environment variables only. Docker Compose users are we
 
 ## Security Notes
 
+- **Hardened Docker Image**: Gatherarr uses a hardened Python 3.14 Docker image from Docker Hardened Images (DHI) for enhanced security. The hardened image provides additional security hardening, minimal attack surface, and follows security best practices.
 - `API_KEY` values are redacted from structured log statements and emitted as `[REDACTED]`.
 - Gatherarr serves `/metrics` without built-in authentication when metrics are enabled. If authentication is required, place Gatherarr behind an external authentication or authorization layer (for example, a reverse proxy with auth controls) and/or network-level access controls.
 - Gatherarr sends `X-Api-Key` to each configured `*arr` target. If `GTH_ARR_<n>_BASEURL` uses `http://` instead of `https://`, that API key is transmitted in cleartext over the network.
