@@ -90,8 +90,5 @@
   "remoteEnv": {
     "PYTHONPATH": "/workspace",
     "UV_LINK_MODE": "copy"
-  },
-  "features": {
-    "ghcr.io/devcontainers/features/git:1": {}
   }
 }
