@@ -23,6 +23,7 @@ dev = [
   "pytest-asyncio>=0.23.0",
   "pytest-timeout>=2.2.0",
   "ruff>=0.1.0",
+  "types-jsonschema>=4.26.0.20260202",
   "types-pyyaml>=6.0.12",
 ]
 
