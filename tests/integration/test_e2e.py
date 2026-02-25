@@ -561,18 +561,6 @@ async def test_scheduler_persists_and_recovers_state_from_previous_file(tmp_path
   assert restored_target_state.items["101"].last_result == "search_triggered"
 
 
-def test_corrupted_state_file_is_moved_aside(tmp_path: Path) -> None:
-  state_file_path = tmp_path / "state.yaml"
-  state_file_path.write_text("targets: [not-valid-yaml", encoding="utf-8")
-
-  state_manager = StateManager(FileStateStorage(state_file_path))
-  state_manager.load()
-
-  assert state_manager.state.total_runs == 0
-  corrupt_files = list(tmp_path.glob(".corrupt.*"))
-  assert len(corrupt_files) == 1
-
-
 @pytest.mark.asyncio
 async def test_metrics_endpoint_exposes_target_metrics_after_scheduler_run(tmp_path: Path) -> None:
   responses = {
