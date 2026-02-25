@@ -11,13 +11,15 @@ from typing import Any, Iterator
 
 import httpx
 import pytest
-from jsonschema import Draft7Validator, FormatChecker, RefResolver, ValidationError
+from jsonschema import Draft7Validator, FormatChecker, ValidationError
+from referencing import Registry
+from referencing.jsonschema import DRAFT7
 
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
 from app.http_client import HttpxClient
 from app.main import create_web_app
-from app.scheduler import MovieId, Scheduler, SeriesId
+from app.scheduler import MovieId, Scheduler, SeasonId
 from app.state import FileStateStorage, RunStatus, StateManager
 
 RouteKey = tuple[str, str]
@@ -82,6 +84,23 @@ def first_content_schema(operation_section: dict[str, Any]) -> dict[str, Any]:
   return schema
 
 
+def preferred_media_type(content_section: dict[str, Any]) -> str:
+  """Select preferred media type for schema lookup."""
+  if "application/json" in content_section:
+    return "application/json"
+  if "text/json" in content_section:
+    return "text/json"
+  if "text/plain" in content_section:
+    return "text/plain"
+  available_types = ", ".join(sorted(content_section.keys()))
+  raise AssertionError(f"No supported media type found. Available: {available_types}")
+
+
+def pointer_token(value: str) -> str:
+  """Escape a value for JSON pointer tokens."""
+  return value.replace("~", "~0").replace("/", "~1")
+
+
 def format_validation_error(error: ValidationError) -> str:
   """Format jsonschema validation errors for assertions."""
   path_tokens = [str(token) for token in error.absolute_path]
@@ -95,8 +114,9 @@ class OpenApiContract:
   def __init__(self, service_name: str, spec_path: Path) -> None:
     self.service_name = service_name
     self.spec_path = spec_path
-    self.document = load_openapi_document(spec_path)
-    self.resolver = RefResolver.from_schema(self.document)
+    self.spec_uri = f"urn:openapi:{service_name}"
+    self.document = normalize_openapi_schema(load_openapi_document(spec_path))
+    self.registry = Registry().with_resource(self.spec_uri, DRAFT7.create_resource(self.document))
 
   def operation(self, method: str, path: str) -> dict[str, Any]:
     """Get an operation definition for a method/path pair."""
@@ -143,12 +163,15 @@ class OpenApiContract:
       raise AssertionError(
         f"{self.service_name} response {status_code} for {method} {path} has no content"
       )
-    schema_fragment = first_content_schema(content)
-    schema = normalize_openapi_schema(schema_fragment)
-
+    media_type = preferred_media_type(content)
+    schema_pointer = (
+      f"/paths/{pointer_token(path)}/{method.lower()}/responses/{status_code}/content/"
+      f"{pointer_token(media_type)}/schema"
+    )
+    schema = {"$ref": f"{self.spec_uri}#{schema_pointer}"}
     validator = Draft7Validator(
       schema=schema,
-      resolver=self.resolver,
+      registry=self.registry,
       format_checker=FormatChecker(),
     )
     errors = sorted(validator.iter_errors(body), key=lambda error: list(error.absolute_path))
@@ -169,12 +192,15 @@ class OpenApiContract:
     content = request_body.get("content")
     if not isinstance(content, dict):
       raise AssertionError(f"{self.service_name} requestBody has no content for {method} {path}")
-    schema_fragment = first_content_schema(content)
-    schema = normalize_openapi_schema(schema_fragment)
-
+    media_type = preferred_media_type(content)
+    schema_pointer = (
+      f"/paths/{pointer_token(path)}/{method.lower()}/requestBody/content/"
+      f"{pointer_token(media_type)}/schema"
+    )
+    schema = {"$ref": f"{self.spec_uri}#{schema_pointer}"}
     validator = Draft7Validator(
       schema=schema,
-      resolver=self.resolver,
+      registry=self.registry,
       format_checker=FormatChecker(),
     )
     errors = sorted(validator.iter_errors(body), key=lambda error: list(error.absolute_path))
@@ -408,7 +434,16 @@ async def test_radarr_success_flow_with_real_http_stack() -> None:
 async def test_sonarr_success_flow_with_real_http_stack() -> None:
   responses = {
     ("GET", "/api/v3/series"): [
-      ResponseSpec(status_code=200, body=[{"id": 22, "title": "Integration Series"}]),
+      ResponseSpec(
+        status_code=200,
+        body=[
+          {
+            "id": 22,
+            "title": "Integration Series",
+            "seasons": [{"seasonNumber": 1}, {"seasonNumber": 2}],
+          }
+        ],
+      ),
     ],
     ("POST", "/api/v3/command"): [
       ResponseSpec(status_code=200, body={"id": 601, "status": "queued"}),
@@ -427,11 +462,14 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
         timeout_s=0.5,
       )
 
-      series = await arr_client.get_series({"run_id": "integration-sonarr-success"})
-      assert series == [{"id": 22, "title": "Integration Series"}]
+      seasons = await arr_client.get_seasons({"run_id": "integration-sonarr-success"})
+      assert seasons == [
+        {"seriesId": 22, "seriesTitle": "Integration Series", "seasonNumber": 1},
+        {"seriesId": 22, "seriesTitle": "Integration Series", "seasonNumber": 2},
+      ]
 
-      command_result = await arr_client.search_series(
-        SeriesId(series_id=22, series_name="Integration Series"),
+      command_result = await arr_client.search_season(
+        SeasonId(series_id=22, season_number=1, series_name="Integration Series"),
         {"run_id": "integration-sonarr-success"},
       )
       assert command_result == {"id": 601, "status": "queued"}
@@ -439,7 +477,11 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
     assert fake_server.request_count("GET", "/api/v3/series") == 1
     command_requests = fake_server.requests_for("POST", "/api/v3/command")
     assert len(command_requests) == 1
-    assert json.loads(command_requests[0].body_text) == {"name": "SeriesSearch", "seriesId": 22}
+    assert json.loads(command_requests[0].body_text) == {
+      "name": "SeasonSearch",
+      "seriesId": 22,
+      "seasonNumber": 1,
+    }
 
 
 @pytest.mark.asyncio
