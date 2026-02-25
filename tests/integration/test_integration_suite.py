@@ -5,7 +5,6 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterator
@@ -28,9 +27,8 @@ RADARR_SPEC_PATH = REPO_ROOT / "context" / "radarr_api.json"
 SONARR_SPEC_PATH = REPO_ROOT / "context" / "sonarr_api.json"
 
 
-@lru_cache(maxsize=2)
 def load_openapi_document(spec_path: Path) -> dict[str, Any]:
-  """Load and cache an OpenAPI document."""
+  """Load an OpenAPI document."""
   with spec_path.open("r", encoding="utf-8") as spec_file:
     spec_document = json.load(spec_file)
   if not isinstance(spec_document, dict):
