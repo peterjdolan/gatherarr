@@ -9,7 +9,7 @@ Huntarrs are great, but when you need a calm, reliable, and simple helper, you n
 - **Configuration model:** Environment variables only. `.env` files and Docker Secrets may be used to manage configuration and API keys.
 - **Security model:** No sensitive information written to disk or emitted in logs. No outgoing network requests except to the configured *arr servers. No telemetry or monitoring.
 
-## Minimal Deployment example via Docker Compose
+## Minimal Deployment with Docker Compose
 
 ```yaml
 services:
