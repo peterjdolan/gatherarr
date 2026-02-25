@@ -14,6 +14,12 @@ with low operational complexity.
   - authenticate via API key,
   - issue supported search action(s),
   - record attempt outcome and timestamps.
+- Supported search scope is:
+  - Movies (Radarr)
+  - Individual seasons (Sonarr)
+- Explicitly out of scope:
+  - Series-wide searches
+  - Episode-level searches
 - Execute runs at configured intervals with per-target and global operation limits.
 - Handle transient API failures using bounded retry/backoff.
 - Persist state after each run or attempt outcome.
@@ -58,7 +64,7 @@ with low operational complexity.
 - Include correlation fields: `target_name`, `target_type`, `run_id`.
 - For item-related actions, include:
   - Movies: `movie_id` field
-  - Series: `series_id` field (season_id support is planned for future development)
+  - Seasons: `series_id` and `season_number` fields
 
 ## Reliability and Security Requirements
 
