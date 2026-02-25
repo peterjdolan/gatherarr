@@ -40,5 +40,8 @@ jobs:
       - name: Run tests
         run: uv run poe test
 
+      - name: Run integration tests
+        run: uv run poe test-e2e
+
       - name: Run type checks
         run: uv run poe type-check

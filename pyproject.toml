@@ -29,13 +29,14 @@ dev = [
 
 [tool.poe.tasks]
 check = ["format", "lint", "type-check", "test"]
+check-e2e = ["check", "test-e2e"]
 format = "ruff format ."
 format-check = "ruff format --check ."
 lint = "ruff check --fix ."
 lint-check = "ruff check ."
 type-check = "mypy ."
-test = "pytest tests"
-test-e2e = "env PYTHONPATH=. pytest tests/integration"
+test = "pytest tests --ignore=tests/integration"
+test-e2e = "python -m pytest tests/integration"
 
 [tool.ruff]
 target-version = "py313"
