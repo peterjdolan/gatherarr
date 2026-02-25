@@ -21,7 +21,7 @@ class Action(StrEnum):
 def log_item_action(
   logger: structlog.BoundLogger,
   action: Action,
-  item_id: ItemId,
+  item_id: "ItemId",
   **kwargs: Any,
 ) -> None:
   """Helper function to log an item-related action with correlation fields at INFO level.
@@ -31,7 +31,12 @@ def log_item_action(
     action: Action description/message
     **kwargs: Additional fields to include in the log entry (e.g., run_id, target_name, arr_type, movie_id, series_id, season_id)
   """
-  logger.info(action=action.value, **kwargs, **item_id.logging_ids())
+  logger.info(
+    f"Action: {action.value}",
+    action=action.value,
+    **kwargs,
+    **item_id.logging_ids(),
+  )
 
 
 def log_movie_action(

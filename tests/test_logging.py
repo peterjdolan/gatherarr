@@ -6,6 +6,7 @@ import structlog
 
 from app.config import ArrType
 from app.logging import Action, log_item_action, log_movie_action, log_series_action
+from app.scheduler import MovieId
 
 
 class TestLogging:
@@ -15,13 +16,14 @@ class TestLogging:
     logger = Mock(spec=structlog.BoundLogger)
     logger.info = mock_info
 
+    movie_id = MovieId(movie_id=42, movie_name="Test Movie")
     log_item_action(
       logger=logger,
       action=Action.SEARCH_MOVIE,
+      item_id=movie_id,
       target_name="test-target",
       target_type=ArrType.RADARR.value,
       run_id="test-run-123",
-      movie_id="42",
     )
 
     mock_info.assert_called_once()
@@ -32,11 +34,10 @@ class TestLogging:
     assert call_kwargs["target_type"] == ArrType.RADARR.value
     assert call_kwargs["run_id"] == "test-run-123"
     assert call_kwargs["movie_id"] == "42"
+    assert call_kwargs["movie_name"] == "Test Movie"
 
   def test_log_movie_action_includes_correlation_fields(self) -> None:
     """Test log_movie_action includes movie_id and all correlation fields."""
-    from app.scheduler import MovieId
-
     mock_info = Mock()
     logger = Mock(spec=structlog.BoundLogger)
     logger.info = mock_info
@@ -62,8 +63,6 @@ class TestLogging:
 
   def test_log_movie_action_without_name(self) -> None:
     """Test log_movie_action works without movie_name."""
-    from app.scheduler import MovieId
-
     mock_info = Mock()
     logger = Mock(spec=structlog.BoundLogger)
     logger.info = mock_info

@@ -203,6 +203,8 @@ class Scheduler:
         **run_logging_ids,
       )
     except Exception as e:
+      duration_s = time.time() - run_start
+
       target_state.last_status = RunStatus.ERROR
       target_state.consecutive_failures += 1
 
@@ -284,16 +286,20 @@ class Scheduler:
         )
         break
 
-      item_logging_ids = {
+      handler_logging_ids = {
         **logging_ids,
         **target.logging_ids(),
         **target_state.logging_ids(),
-        **item_handler.extract_logging_id(item),
       }
+
       item_id = item_handler.extract_item_id(item)
       if item_id is None:
         logger.warning("Skipping item with no ID", **item_logging_ids)
         continue
+      item_logging_ids = {
+        **handler_logging_ids,
+        **item_handler.extract_logging_id(item),
+      }
 
       item_id_str = item_id.format_for_state()
       item_state = target_state.items.get(item_id_str)
@@ -320,7 +326,7 @@ class Scheduler:
         await item_handler.search(
           client=client,
           item=item,
-          logging_ids=item_logging_ids,
+          logging_ids=handler_logging_ids,
         )
         request_end = time.time()
         request_duration = request_end - request_start
