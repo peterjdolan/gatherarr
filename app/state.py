@@ -30,6 +30,15 @@ class ItemState:
   last_result: str
   last_status: str
 
+  def logging_ids(self) -> dict[str, str]:
+    """Logging identifiers for the item."""
+    return {
+      "item_id": self.item_id,
+      "item_last_processed_timestamp": str(self.last_processed_timestamp),
+      "item_last_result": self.last_result,
+      "item_last_status": self.last_status,
+    }
+
 
 @dataclass
 class TargetState:
@@ -39,8 +48,16 @@ class TargetState:
   last_success_timestamp: float = 0.0
   last_status: RunStatus = RunStatus.UNKNOWN
   consecutive_failures: int = 0
-  last_error_summary: str = ""
   items: dict[str, ItemState] = field(default_factory=dict)
+
+  def logging_ids(self) -> dict[str, str]:
+    """Logging identifiers for the item."""
+    return {
+      "target_last_run_timestamp": str(self.last_run_timestamp),
+      "target_last_success_timestamp": str(self.last_success_timestamp),
+      "target_last_status": self.last_status.value,
+      "target_consecutive_failures": str(self.consecutive_failures),
+    }
 
 
 @dataclass
@@ -50,6 +67,14 @@ class State:
   process_start_timestamp: float = field(default_factory=time.time)
   total_runs: int = 0
   targets: dict[str, TargetState] = field(default_factory=dict)
+
+  def logging_ids(self) -> dict[str, str]:
+    """Logging identifiers for the state."""
+    return {
+      "process_start_timestamp": str(self.process_start_timestamp),
+      "total_runs": str(self.total_runs),
+      "target_count": str(len(self.targets)),
+    }
 
 
 class StateStorage(Protocol):
@@ -202,8 +227,7 @@ class StateManager:
         self.state = self._deserialize(data)
         logger.debug(
           "State loaded successfully",
-          total_runs=self.state.total_runs,
-          target_count=len(self.state.targets),
+          **self.state.logging_ids(),
         )
       except (KeyError, ValueError, TypeError) as e:
         logger.error("State deserialization failed", error=str(e))
@@ -233,7 +257,6 @@ class StateManager:
         last_success_timestamp=target_data.get("last_success_timestamp", 0.0),
         last_status=last_status,
         consecutive_failures=target_data.get("consecutive_failures", 0),
-        last_error_summary=target_data.get("last_error_summary", ""),
       )
 
       items_data = target_data.get("items", {})
@@ -251,7 +274,7 @@ class StateManager:
 
   def _handle_corrupted_state(self, error: Exception) -> None:
     """Handle corrupted state by moving it aside and starting fresh."""
-    logger.warning("State corruption detected, recovering", error=str(error))
+    logger.warning("State corruption detected, resetting..", error=str(error))
     self.storage.move_corrupted()
     self.state = State()
 
@@ -259,8 +282,7 @@ class StateManager:
     """Save state to storage using atomic write semantics."""
     logger.debug(
       "Saving state",
-      total_runs=self.state.total_runs,
-      target_count=len(self.state.targets),
+      **self.state.logging_ids(),
     )
     data = self._serialize()
     logger.debug("State serialized, writing to storage")

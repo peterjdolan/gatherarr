@@ -32,6 +32,7 @@ class ArrTarget(BaseModel):
   ops_per_interval: int = Field(ge=1)
   interval_s: int = Field(ge=1)
   item_revisit_timeout_s: int = Field(ge=1)
+  _logging_ids: dict[str, str] | None = None
 
   @field_validator("name")
   @classmethod
@@ -59,6 +60,12 @@ class ArrTarget(BaseModel):
     if parsed.scheme not in ("http", "https"):
       raise ValueError(f"base_url must use http or https scheme, got: {parsed.scheme}")
     return v
+
+  def logging_ids(self) -> dict[str, str]:
+    """Return logging identifiers for the target."""
+    if self._logging_ids is None:
+      self._logging_ids = {"target_name": self.name, "target_type": self.arr_type.value}
+    return self._logging_ids
 
 
 class TargetOverrideSettings(BaseSettings):

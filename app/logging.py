@@ -1,0 +1,83 @@
+"""Helper functions for consistent item-related logging with correlation fields."""
+
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
+
+import structlog
+
+if TYPE_CHECKING:
+  from app.scheduler import ItemId, MovieId, SeriesId
+
+
+class Action(StrEnum):
+  """Actions that can be logged."""
+
+  GET_MOVIES = "get_movies"
+  GET_SERIES = "get_series"
+  SEARCH_MOVIE = "search_movie"
+  SEARCH_SERIES = "search_series"
+
+
+def log_item_action(
+  logger: structlog.BoundLogger,
+  action: Action,
+  item_id: "ItemId",
+  **kwargs: Any,
+) -> None:
+  """Helper function to log an item-related action with correlation fields at INFO level.
+
+  Args:
+    logger: The structlog logger instance to use
+    action: Action description/message
+    **kwargs: Additional fields to include in the log entry (e.g., run_id, target_name, arr_type, movie_id, series_id, season_id)
+  """
+  logger.info(
+    f"Action: {action.value}",
+    action=action.value,
+    **kwargs,
+    **item_id.logging_ids(),
+  )
+
+
+def log_movie_action(
+  logger: structlog.BoundLogger,
+  action: Action,
+  movie_id: "MovieId",
+  **kwargs: Any,
+) -> None:
+  """Log a movie-related action with required movie_id correlation field at INFO level.
+
+  Args:
+    logger: The structlog logger instance to use
+    action: Action description/message
+    movie_id: Movie identifier
+    **kwargs: Additional fields to include in the log entry
+  """
+  log_item_action(
+    logger=logger,
+    action=action,
+    item_id=movie_id,
+    **kwargs,
+  )
+
+
+def log_series_action(
+  logger: structlog.BoundLogger,
+  action: Action,
+  series_id: "SeriesId",
+  **kwargs: Any,
+) -> None:
+  """Log a series-related action with required series_id correlation field at INFO level.
+
+  Args:
+    logger: The structlog logger instance to use
+    action: Action description/message
+    series_id: Series identifier
+    **kwargs: Additional fields to include in the log entry
+  """
+  log_item_action(
+    logger=logger,
+    action=action,
+    item_id=series_id,
+    **kwargs,
+  )

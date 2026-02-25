@@ -53,8 +53,12 @@ with low operational complexity.
 
 ### Logging
 
-- JSON structured logs to stdout/stderr.
-- Include correlation fields: `target`, `type`, `run_id`, `status`, `duration_ms`.
+- ALL INFO level logs MUST be structured JSON output to stdout/stderr.
+- ALL INFO level logs MUST indicate and ONLY indicate actions taken that materially affects a target.
+- Include correlation fields: `target_name`, `target_type`, `run_id`.
+- For item-related actions, include:
+  - Movies: `movie_id` field
+  - Series: `series_id` field (season_id support is planned for future development)
 
 ## Reliability and Security Requirements
 

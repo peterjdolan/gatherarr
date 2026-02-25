@@ -1,7 +1,7 @@
 """Tests for scheduler module."""
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -16,40 +16,44 @@ if TYPE_CHECKING:
 class FakeArrClient:
   """Fake ArrClient for testing."""
 
-  def __init__(self, arr_type: str) -> None:
-    self.arr_type = arr_type
+  def __init__(self, target: ArrTarget) -> None:
+    self.target = target
     self.get_movies_called = False
     self.get_series_called = False
     self.search_movie_called = False
     self.search_series_called = False
+    self.search_movie_id: int | None = None
+    self.search_series_id: int | None = None
 
-  async def get_movies(self) -> list[dict]:
+  async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_movies_called = True
     return [{"id": 1, "title": "Movie 1"}, {"id": 2, "title": "Movie 2"}]
 
-  async def get_series(self) -> list[dict]:
+  async def get_series(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_series_called = True
     return [{"id": 1, "title": "Series 1"}]
 
-  async def search_movie(self, movie_id: int) -> dict:
+  async def search_movie(self, movie_id: Any, logging_ids: dict[str, Any]) -> dict:
     self.search_movie_called = True
+    self.search_movie_id = movie_id
     return {"id": 1}
 
-  async def search_series(self, series_id: int) -> dict:
+  async def search_series(self, series_id: Any, logging_ids: dict[str, Any]) -> dict:
     self.search_series_called = True
+    self.search_series_id = series_id.series_id if hasattr(series_id, "series_id") else series_id
     return {"id": 1}
 
 
 class FakeClientWithError:
   """Fake client that raises errors."""
 
-  def __init__(self, arr_type: str) -> None:
-    self.arr_type = arr_type
+  def __init__(self, target: ArrTarget) -> None:
+    self.target = target
 
-  async def get_movies(self) -> list[dict]:
+  async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
     raise RuntimeError("API error")
 
-  async def get_series(self) -> list[dict]:
+  async def get_series(self, logging_ids: dict[str, Any]) -> list[dict]:
     raise RuntimeError("API error")
 
 
@@ -82,21 +86,27 @@ def create_scheduler(
   fake_client: FakeArrClient | FakeClientWithError,
 ) -> Scheduler:
   """Create a Scheduler with the given target, state manager, and client."""
-  arr_clients = {target.name: fake_client}
-  return Scheduler([target], state_manager, arr_clients)  # type: ignore[arg-type]
+  from app.arr_client import ArrClient
+
+  # Fake clients are compatible with ArrClient interface for testing
+  arr_clients: dict[str, ArrClient] = {target.name: fake_client}  # type: ignore[dict-item]
+  return Scheduler([target], state_manager, arr_clients)
 
 
 class TestScheduler:
   @pytest.mark.asyncio
   async def test_run_once_radarr(self, state_manager: StateManager) -> None:
     target = create_target("test-radarr", ArrType.RADARR)
-    fake_client = FakeArrClient("radarr")
+    fake_client = FakeArrClient(target)
     scheduler = create_scheduler(target, state_manager, fake_client)
 
     await scheduler.run_once(target)
 
     assert fake_client.get_movies_called
     assert fake_client.search_movie_called
+    # search_movie_id will be a MovieId object (last one processed)
+    assert fake_client.search_movie_id is not None
+    assert hasattr(fake_client.search_movie_id, "movie_id")
     target_state = state_manager.get_target_state("test-radarr")
     assert target_state.last_status == RunStatus.SUCCESS
     assert target_state.consecutive_failures == 0
@@ -104,18 +114,19 @@ class TestScheduler:
   @pytest.mark.asyncio
   async def test_run_once_sonarr(self, state_manager: StateManager) -> None:
     target = create_target("test-sonarr", ArrType.SONARR)
-    fake_client = FakeArrClient("sonarr")
+    fake_client = FakeArrClient(target)
     scheduler = create_scheduler(target, state_manager, fake_client)
 
     await scheduler.run_once(target)
 
     assert fake_client.get_series_called
     assert fake_client.search_series_called
+    assert fake_client.search_series_id == 1
 
   @pytest.mark.asyncio
   async def test_run_once_respects_ops_limit(self, state_manager: StateManager) -> None:
     target = create_target("test", ArrType.RADARR, ops_per_interval=2)
-    fake_client = FakeArrClient("radarr")
+    fake_client = FakeArrClient(target)
     scheduler = create_scheduler(target, state_manager, fake_client)
 
     await scheduler.run_once(target)
@@ -142,7 +153,7 @@ class TestScheduler:
       last_status="success",
     )
 
-    fake_client = FakeArrClient("radarr")
+    fake_client = FakeArrClient(target)
     scheduler = create_scheduler(target, state_manager, fake_client)
 
     await scheduler.run_once(target)
@@ -154,7 +165,7 @@ class TestScheduler:
   @pytest.mark.asyncio
   async def test_run_once_handles_error(self, state_manager: StateManager) -> None:
     target = create_target("test", ArrType.RADARR)
-    fake_client = FakeClientWithError("radarr")
+    fake_client = FakeClientWithError(target)
     scheduler = create_scheduler(target, state_manager, fake_client)
 
     await scheduler.run_once(target)
