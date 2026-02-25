@@ -12,8 +12,8 @@ from tenacity import (
   wait_exponential,
 )
 
+from app.action_logging import Action
 from app.config import ArrTarget, ArrType
-from app.logging import Action
 
 if TYPE_CHECKING:
   from app.scheduler import MovieId, SeasonId

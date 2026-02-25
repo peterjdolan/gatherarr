@@ -12,11 +12,7 @@ COPY uv.lock* ./
 
 # Install dependencies using uv into a virtual environment
 # uv sync creates a .venv directory with all dependencies
-RUN if [ -f uv.lock ]; then \
-        uv sync --frozen --no-dev; \
-    else \
-        uv sync --no-dev; \
-    fi
+RUN uv sync --frozen --no-dev
 
 # Runtime stage
 FROM dhi.io/python:3.14
@@ -41,4 +37,4 @@ EXPOSE 9090
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD /app/.venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:9090/health').read()" || exit 1
 
-CMD ["/app/.venv/bin/python", "app/main.py"]
+CMD ["/app/.venv/bin/python", "-m", "app.main"]
