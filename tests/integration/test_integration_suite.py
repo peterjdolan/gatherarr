@@ -12,7 +12,7 @@ from typing import Any, Iterator
 
 import httpx
 import pytest
-from jsonschema import Draft7Validator, FormatChecker, ValidationError
+from jsonschema import Draft7Validator, FormatChecker, RefResolver, ValidationError
 
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
@@ -38,42 +38,16 @@ def load_openapi_document(spec_path: Path) -> dict[str, Any]:
   return spec_document
 
 
-def resolve_json_ref(document: dict[str, Any], ref: str) -> dict[str, Any]:
-  """Resolve a local JSON pointer reference."""
-  if not ref.startswith("#/"):
-    raise AssertionError(f"Only local refs are supported, got: {ref}")
-
-  node: Any = document
-  for raw_part in ref[2:].split("/"):
-    part = raw_part.replace("~1", "/").replace("~0", "~")
-    if not isinstance(node, dict) or part not in node:
-      raise AssertionError(f"Could not resolve ref {ref}")
-    node = node[part]
-
-  if not isinstance(node, dict):
-    raise AssertionError(f"Resolved ref {ref} did not produce an object schema")
-  return node
-
-
-def resolve_openapi_schema(document: dict[str, Any], schema_fragment: Any) -> Any:
-  """Resolve refs and normalize OpenAPI schema fragments into JSON Schema."""
+def normalize_openapi_schema(schema_fragment: Any) -> Any:
+  """Normalize OpenAPI schema fragments into JSON Schema-compatible fragments."""
   if isinstance(schema_fragment, list):
-    return [resolve_openapi_schema(document, item) for item in schema_fragment]
+    return [normalize_openapi_schema(item) for item in schema_fragment]
 
   if not isinstance(schema_fragment, dict):
     return schema_fragment
 
-  if "$ref" in schema_fragment:
-    resolved_fragment = resolve_json_ref(document, str(schema_fragment["$ref"]))
-    sibling_keys = {key: value for key, value in schema_fragment.items() if key != "$ref"}
-    merged_fragment = {
-      **resolve_openapi_schema(document, resolved_fragment),
-      **resolve_openapi_schema(document, sibling_keys),
-    }
-    return merged_fragment
-
   normalized_fragment = {
-    key: resolve_openapi_schema(document, value) for key, value in schema_fragment.items()
+    key: normalize_openapi_schema(value) for key, value in schema_fragment.items()
   }
 
   if normalized_fragment.get("nullable") is True:
@@ -124,6 +98,7 @@ class OpenApiContract:
     self.service_name = service_name
     self.spec_path = spec_path
     self.document = load_openapi_document(spec_path)
+    self.resolver = RefResolver.from_schema(self.document)
 
   def operation(self, method: str, path: str) -> dict[str, Any]:
     """Get an operation definition for a method/path pair."""
@@ -171,9 +146,13 @@ class OpenApiContract:
         f"{self.service_name} response {status_code} for {method} {path} has no content"
       )
     schema_fragment = first_content_schema(content)
-    schema = resolve_openapi_schema(self.document, schema_fragment)
+    schema = normalize_openapi_schema(schema_fragment)
 
-    validator = Draft7Validator(schema=schema, format_checker=FormatChecker())
+    validator = Draft7Validator(
+      schema=schema,
+      resolver=self.resolver,
+      format_checker=FormatChecker(),
+    )
     errors = sorted(validator.iter_errors(body), key=lambda error: list(error.absolute_path))
     if errors:
       formatted_error = format_validation_error(errors[0])
@@ -193,9 +172,13 @@ class OpenApiContract:
     if not isinstance(content, dict):
       raise AssertionError(f"{self.service_name} requestBody has no content for {method} {path}")
     schema_fragment = first_content_schema(content)
-    schema = resolve_openapi_schema(self.document, schema_fragment)
+    schema = normalize_openapi_schema(schema_fragment)
 
-    validator = Draft7Validator(schema=schema, format_checker=FormatChecker())
+    validator = Draft7Validator(
+      schema=schema,
+      resolver=self.resolver,
+      format_checker=FormatChecker(),
+    )
     errors = sorted(validator.iter_errors(body), key=lambda error: list(error.absolute_path))
     if errors:
       formatted_error = format_validation_error(errors[0])
