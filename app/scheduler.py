@@ -292,14 +292,14 @@ class Scheduler:
         **target_state.logging_ids(),
       }
 
-      item_id = item_handler.extract_item_id(item)
-      if item_id is None:
-        logger.warning("Skipping item with no ID", **item_logging_ids)
-        continue
       item_logging_ids = {
         **handler_logging_ids,
         **item_handler.extract_logging_id(item),
       }
+      item_id = item_handler.extract_item_id(item)
+      if item_id is None:
+        logger.warning("Skipping item with no ID", **item_logging_ids)
+        continue
 
       item_id_str = item_id.format_for_state()
       item_state = target_state.items.get(item_id_str)
