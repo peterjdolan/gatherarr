@@ -20,7 +20,7 @@ def redact_sensitive_fields(
   """Redact sensitive fields from structlog event dictionaries."""
   _ = logger
   _ = method_name
-  return _redact_value(dict(event_dict))
+  return _redact_mapping(event_dict)
 
 
 def _redact_value(value: Any) -> Any:
@@ -33,7 +33,7 @@ def _redact_value(value: Any) -> Any:
     return tuple(_redact_value(item) for item in value)
   if hasattr(value, "model_dump"):
     return _redact_value(value.model_dump())
-  if is_dataclass(value):
+  if is_dataclass(value) and not isinstance(value, type):
     return _redact_value(asdict(value))
   return value
 
