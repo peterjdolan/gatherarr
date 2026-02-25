@@ -33,6 +33,10 @@ class ItemId:
     """Format the item ID for use as a state lookup key."""
     raise NotImplementedError
 
+  def logging_ids(self) -> dict[str, Any]:
+    """Get logging identifiers for the item."""
+    raise NotImplementedError
+
 
 @dataclass
 class MovieId(ItemId):
@@ -45,6 +49,13 @@ class MovieId(ItemId):
     """Format movie ID for state lookup."""
     return str(self.movie_id)
 
+  def logging_ids(self) -> dict[str, Any]:
+    """Get logging identifiers for the movie."""
+    return {
+      "movie_id": str(self.movie_id),
+      "movie_name": self.movie_name if self.movie_name is not None else "None",
+    }
+
 
 @dataclass
 class SeriesId(ItemId):
@@ -56,6 +67,13 @@ class SeriesId(ItemId):
   def format_for_state(self) -> str:
     """Format series ID and name for state lookup."""
     return str(self.series_id)
+
+  def logging_ids(self) -> dict[str, Any]:
+    """Get logging identifiers for the series."""
+    return {
+      "series_id": str(self.series_id),
+      "series_name": self.series_name if self.series_name is not None else "None",
+    }
 
 
 class ItemHandler(Protocol):
@@ -91,7 +109,6 @@ class ItemHandler(Protocol):
     self,
     client: ArrClient,
     item: dict[str, Any],
-    target: ArrTarget,
     logging_ids: dict[str, str],
   ) -> None:
     """Trigger search for the item and log the action."""
@@ -124,6 +141,7 @@ class Scheduler:
     """Execute a single run for a target."""
     target_state = self.state_manager.get_target_state(target.name)
     run_start = time.time()
+    duration_s = 0.0
 
     target_state.last_run_timestamp = run_start
     run_logging_ids = {
@@ -162,7 +180,7 @@ class Scheduler:
       )
 
       processed = await self._process_items(
-        target, client, items, target_state, handler, run_start, run_logging_ids
+        target, client, items, target_state, handler, run_logging_ids
       )
 
       run_end = time.time()
@@ -241,7 +259,6 @@ class Scheduler:
     items: list[dict[str, Any]],
     target_state: TargetState,
     item_handler: ItemHandler,
-    run_start: float,
     logging_ids: dict[str, Any],
   ) -> int:
     """Process items and trigger searches using the provided handler."""
@@ -267,21 +284,22 @@ class Scheduler:
         )
         break
 
-      item_logging_ids = item_handler.extract_logging_id(item)
+      item_logging_ids = {
+        **logging_ids,
+        **target.logging_ids(),
+        **target_state.logging_ids(),
+        **item_handler.extract_logging_id(item),
+      }
       item_id = item_handler.extract_item_id(item)
       if item_id is None:
-        # Use generic logger for items without IDs since we don't have correlation fields
-        logger.warning(
-          "Skipping item with no ID",
-          **logging_ids,
-          **target.logging_ids(),
-          **target_state.logging_ids(),
-          **item_logging_ids,
-        )
+        logger.warning("Skipping item with no ID", **item_logging_ids)
         continue
 
       item_id_str = item_id.format_for_state()
       item_state = target_state.items.get(item_id_str)
+
+      item_logging_ids.update(item_id.logging_ids())
+      item_logging_ids.update(item_state.logging_ids())
 
       if item_state is not None:
         time_since_last = time.time() - item_state.last_processed_timestamp
@@ -290,9 +308,6 @@ class Scheduler:
             "Skipping item (revisit timeout not met)",
             time_since_last=time_since_last,
             revisit_timeout=target.item_revisit_timeout_s,
-            **logging_ids,
-            **target.logging_ids(),
-            **target_state.logging_ids(),
             **item_logging_ids,
           )
           skips_total.labels(target=target.name, type=target.arr_type.value).inc()
@@ -304,8 +319,7 @@ class Scheduler:
         await item_handler.search(
           client=client,
           item=item,
-          target=target,
-          logging_ids=logging_ids,
+          logging_ids=item_logging_ids,
         )
         request_end = time.time()
         request_duration = request_end - request_start
@@ -313,12 +327,14 @@ class Scheduler:
           request_duration
         )
 
-        target_state.items[item_id_str] = ItemState(
+        item_state = ItemState(
           item_id=item_id_str,
           last_processed_timestamp=request_end,
           last_result="search_triggered",
           last_status="success",
         )
+        target_state.items[item_id_str] = item_state
+        item_logging_ids.update(item_state.logging_ids())
 
         grabs_total.labels(target=target.name, type=target.arr_type.value).inc()
         processed += 1
@@ -327,18 +343,12 @@ class Scheduler:
           "Item processed successfully",
           processed=processed,
           ops_count=ops_count,
-          **logging_ids,
-          **target.logging_ids(),
-          **target_state.logging_ids(),
           **item_logging_ids,
         )
       except Exception as e:
         logger.exception(
           "Exception while processing item",
           exception=e,
-          **logging_ids,
-          **target.logging_ids(),
-          **target_state.logging_ids(),
           **item_logging_ids,
         )
         request_errors_total.labels(target=target.name, type=target.arr_type.value).inc()
@@ -394,7 +404,7 @@ class MovieHandler:
 
     item_logging_ids = self.extract_logging_id(item)
     combined_logging_ids = {**logging_ids, **item_logging_ids}
-    await client.search_movie(item_id.movie_id, logging_ids=combined_logging_ids)
+    await client.search_movie(item_id, logging_ids=combined_logging_ids)
 
     log_movie_action(
       logger=logger,
@@ -448,12 +458,11 @@ class SeriesHandler:
 
     item_logging_ids = self.extract_logging_id(item)
     combined_logging_ids = {**logging_ids, **item_logging_ids}
-    await client.search_series(series_id.series_id, logging_ids=combined_logging_ids)
+    await client.search_series(series_id, logging_ids=combined_logging_ids)
 
     log_series_action(
       logger=logger,
       action=Action.SEARCH_SERIES,
-      series_id=series_id.series_id,
-      series_name=series_id.series_name,
+      series_id=series_id,
       **logging_ids,
     )

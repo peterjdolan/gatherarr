@@ -178,14 +178,10 @@ class ArrClient:
       )
       raise
 
-  async def search_movie(
-    self, movie_id: "MovieId", logging_ids: dict[str, Any]
-  ) -> dict[str, Any]:
+  async def search_movie(self, movie_id: "MovieId", logging_ids: dict[str, Any]) -> dict[str, Any]:
     """Trigger search for a movie in Radarr."""
     if self.target.arr_type != ArrType.RADARR:
       raise ValueError(f"search_movie() only supported for radarr, got {self.target.arr_type}")
-    from app.scheduler import MovieId
-
     url = f"{self.base_url}/api/v3/command"
     payload = {"name": "MoviesSearch", "movieIds": [movie_id.movie_id]}
 
