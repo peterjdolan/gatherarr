@@ -25,8 +25,8 @@ def movie_target(
     require_monitored=require_monitored,
     require_cutoff_unmet=require_cutoff_unmet,
     released_only=released_only,
-    include_tags=list(include_tags),
-    exclude_tags=list(exclude_tags),
+    include_tags=set(include_tags),
+    exclude_tags=set(exclude_tags),
   )
 
 
@@ -51,8 +51,8 @@ def series_target(
     require_monitored=require_monitored,
     require_cutoff_unmet=require_cutoff_unmet,
     released_only=released_only,
-    include_tags=list(include_tags),
-    exclude_tags=list(exclude_tags),
+    include_tags=set(include_tags),
+    exclude_tags=set(exclude_tags),
     min_missing_episodes=min_missing_episodes,
     min_missing_percent=min_missing_percent,
   )

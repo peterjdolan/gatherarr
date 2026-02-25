@@ -110,10 +110,9 @@ class TestLoadConfig:
     assert config.targets[0].require_cutoff_unmet is True
     assert config.targets[0].released_only is False
     assert config.targets[0].search_backoff_s == 0
-    assert config.targets[0].max_searches_per_item_per_day == 0
     assert config.targets[0].dry_run is False
-    assert config.targets[0].include_tags == []
-    assert config.targets[0].exclude_tags == []
+    assert config.targets[0].include_tags == set()
+    assert config.targets[0].exclude_tags == set()
     assert config.targets[0].min_missing_episodes == 0
     assert config.targets[0].min_missing_percent == 0.0
     assert config.log_level == "INFO"
@@ -154,7 +153,6 @@ class TestLoadConfig:
       "GTH_REQUIRE_CUTOFF_UNMET": "false",
       "GTH_RELEASED_ONLY": "true",
       "GTH_SEARCH_BACKOFF_S": "120",
-      "GTH_MAX_SEARCHES_PER_ITEM_PER_DAY": "2",
       "GTH_DRY_RUN": "true",
       "GTH_INCLUDE_TAGS": "global_tag",
       "GTH_EXCLUDE_TAGS": "global_block",
@@ -168,7 +166,6 @@ class TestLoadConfig:
       "GTH_ARR_0_REQUIRE_CUTOFF_UNMET": "true",
       "GTH_ARR_0_RELEASED_ONLY": "false",
       "GTH_ARR_0_SEARCH_BACKOFF_S": "300",
-      "GTH_ARR_0_MAX_SEARCHES_PER_ITEM_PER_DAY": "5",
       "GTH_ARR_0_DRY_RUN": "false",
       "GTH_ARR_0_INCLUDE_TAGS": "anime, 4k, anime",
       "GTH_ARR_0_EXCLUDE_TAGS": "paused",
@@ -181,12 +178,27 @@ class TestLoadConfig:
     assert target.require_cutoff_unmet is True
     assert target.released_only is False
     assert target.search_backoff_s == 300
-    assert target.max_searches_per_item_per_day == 5
     assert target.dry_run is False
-    assert target.include_tags == ["anime", "4k"]
-    assert target.exclude_tags == ["paused"]
+    assert target.include_tags == {"anime", "4k"}
+    assert target.exclude_tags == {"paused"}
     assert target.min_missing_episodes == 3
     assert target.min_missing_percent == 20.5
+
+  def test_load_config_uses_global_tag_sets_without_target_override(self) -> None:
+    """Use global include/exclude tags when target overrides are not provided."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_INCLUDE_TAGS": "global_tag, another",
+      "GTH_EXCLUDE_TAGS": "skip_tag",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+    }
+    config = load_config(env)
+    target = config.targets[0]
+    assert target.include_tags == {"global_tag", "another"}
+    assert target.exclude_tags == {"skip_tag"}
 
   def test_load_multiple_targets(self) -> None:
     env = {
@@ -355,6 +367,24 @@ class TestArrTarget:
     )
     assert target.base_url == "https://example.com:8989"
 
+  def test_arr_target_config_logging_tags(self) -> None:
+    """Test config logging tags omit API key and normalize tags."""
+    target = ArrTarget(
+      name="test",
+      arr_type=ArrType.RADARR,
+      base_url="http://localhost:7878",
+      api_key="secret",
+      ops_per_interval=2,
+      interval_s=90,
+      item_revisit_timeout_s=3000,
+      include_tags={"b", "a"},
+      exclude_tags={"z"},
+    )
+    logging_tags = target.config_logging_tags()
+    assert "api_key" not in logging_tags
+    assert logging_tags["include_tags"] == ["a", "b"]
+    assert logging_tags["exclude_tags"] == ["z"]
+
 
 class TestConfigValidation:
   def test_config_validates_state_file_path_writable(self) -> None:
@@ -500,6 +530,14 @@ class TestTargetOverrideSettings:
     assert settings.ops_per_interval is None
     assert settings.interval_s is None
     assert settings.item_revisit_timeout_s is None
+    assert settings.include_tags is None
+    assert settings.exclude_tags is None
+
+  def test_target_override_parses_csv_tags_to_sets(self) -> None:
+    """Test that TargetOverrideSettings parses CSV tags into sets."""
+    settings = TargetOverrideSettings(include_tags="a, b, a", exclude_tags="skip")
+    assert settings.include_tags == {"a", "b"}
+    assert settings.exclude_tags == {"skip"}
 
   @pytest.mark.parametrize("invalid_value", [-1.0, 101.0])
   def test_target_override_validates_min_missing_percent_range(self, invalid_value: float) -> None:
@@ -528,7 +566,6 @@ class TestLoadConfigValidation:
       ("GTH_ARR_0_INTERVAL_S", "-1"),
       ("GTH_ARR_0_ITEM_REVISIT_TIMEOUT_S", "0"),
       ("GTH_ARR_0_SEARCH_BACKOFF_S", "-1"),
-      ("GTH_ARR_0_MAX_SEARCHES_PER_ITEM_PER_DAY", "-1"),
     ],
   )
   def test_load_config_validates_arr_target_positive_integers(

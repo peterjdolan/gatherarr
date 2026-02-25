@@ -7,7 +7,7 @@ import pytest
 
 from app.config import ArrTarget, ArrType
 from app.scheduler import Scheduler
-from app.state import InMemoryStateStorage, ItemState, RunStatus, StateManager
+from app.state import InMemoryStateStorage, ItemState, ItemStatus, RunStatus, StateManager
 
 if TYPE_CHECKING:
   pass
@@ -191,14 +191,14 @@ class TestScheduler:
       item_id="1",
       last_processed_timestamp=time.time() - 100.0,
       last_result="success",
-      last_status="success",
+      last_status=ItemStatus.SUCCESS,
     )
     # Set item 2 to be processed 100 seconds ago as well, so both should be skipped
     target_state.items["2"] = ItemState(
       item_id="2",
       last_processed_timestamp=time.time() - 100.0,
       last_result="success",
-      last_status="success",
+      last_status=ItemStatus.SUCCESS,
     )
 
     fake_client = FakeArrClient(target)
@@ -256,28 +256,6 @@ class TestScheduler:
     assert not fake_client.search_movie_called
     target_state = state_manager.get_target_state("test-dry-run")
     assert target_state.items["1"].last_result == "dry_run_search_eligible"
-
-  @pytest.mark.asyncio
-  async def test_run_once_respects_max_searches_per_item_per_day(
-    self, state_manager: StateManager
-  ) -> None:
-    target = create_target(
-      "test-daily-limit",
-      ArrType.RADARR,
-      item_revisit_timeout_s=1,
-      max_searches_per_item_per_day=1,
-    )
-    fake_client = FakeClientWithSingleEligibleMovie(target)
-    scheduler = create_scheduler(target, state_manager, fake_client)
-
-    await scheduler.run_once(target)
-
-    target_state = state_manager.get_target_state("test-daily-limit")
-    target_state.items["1"].last_processed_timestamp = time.time() - 10.0
-
-    await scheduler.run_once(target)
-
-    assert fake_client.search_movie_calls == 1
 
   @pytest.mark.asyncio
   async def test_run_once_respects_search_backoff_after_error(

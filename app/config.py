@@ -4,6 +4,7 @@ import ipaddress
 import logging
 import os
 import re
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeVar
@@ -12,6 +13,7 @@ from urllib.parse import urlparse
 import structlog
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from app.tag_utils import coerce_tag_set
 
 logger = structlog.get_logger()
 _OverrideValue = TypeVar("_OverrideValue")
@@ -24,7 +26,6 @@ _TARGET_OVERRIDE_ENV_MAP: tuple[tuple[str, str], ...] = (
   ("REQUIRE_CUTOFF_UNMET", "require_cutoff_unmet"),
   ("RELEASED_ONLY", "released_only"),
   ("SEARCH_BACKOFF_S", "search_backoff_s"),
-  ("MAX_SEARCHES_PER_ITEM_PER_DAY", "max_searches_per_item_per_day"),
   ("DRY_RUN", "dry_run"),
   ("INCLUDE_TAGS", "include_tags"),
   ("EXCLUDE_TAGS", "exclude_tags"),
@@ -33,26 +34,46 @@ _TARGET_OVERRIDE_ENV_MAP: tuple[tuple[str, str], ...] = (
 )
 
 
-def _parse_csv_tags(value: str) -> list[str]:
-  """Parse comma-separated tags into a normalized list."""
-  tags: list[str] = []
-  seen: set[str] = set()
-  for raw_tag in value.split(","):
-    normalized_tag = raw_tag.strip()
-    if not normalized_tag:
-      continue
-    if normalized_tag in seen:
-      continue
-    seen.add(normalized_tag)
-    tags.append(normalized_tag)
-  return tags
-
-
 def _resolve_override_value(
   override_value: _OverrideValue | None, default_value: _OverrideValue
 ) -> _OverrideValue:
   """Resolve an optional override value against a default."""
   return default_value if override_value is None else override_value
+
+
+@dataclass(frozen=True)
+class ResolvedTargetSettings:
+  """Resolved settings for target-level behavior."""
+
+  ops_per_interval: int
+  interval_s: int
+  item_revisit_timeout_s: int
+  require_monitored: bool
+  require_cutoff_unmet: bool
+  released_only: bool
+  search_backoff_s: int
+  dry_run: bool
+  include_tags: set[str]
+  exclude_tags: set[str]
+  min_missing_episodes: int
+  min_missing_percent: float
+
+  def to_dict(self) -> dict[str, Any]:
+    """Serialize resolved settings for ArrTarget construction."""
+    return {
+      "ops_per_interval": self.ops_per_interval,
+      "interval_s": self.interval_s,
+      "item_revisit_timeout_s": self.item_revisit_timeout_s,
+      "require_monitored": self.require_monitored,
+      "require_cutoff_unmet": self.require_cutoff_unmet,
+      "released_only": self.released_only,
+      "search_backoff_s": self.search_backoff_s,
+      "dry_run": self.dry_run,
+      "include_tags": self.include_tags,
+      "exclude_tags": self.exclude_tags,
+      "min_missing_episodes": self.min_missing_episodes,
+      "min_missing_percent": self.min_missing_percent,
+    }
 
 
 def _collect_target_override_data(env_dict: dict[str, str], index: int) -> dict[str, str]:
@@ -69,41 +90,38 @@ def _collect_target_override_data(env_dict: dict[str, str], index: int) -> dict[
 
 def _build_target_settings(
   base_config: "Config", overrides: "TargetOverrideSettings"
-) -> dict[str, Any]:
+) -> ResolvedTargetSettings:
   """Build resolved target settings from defaults and per-target overrides."""
   include_tags_raw = _resolve_override_value(overrides.include_tags, base_config.include_tags)
   exclude_tags_raw = _resolve_override_value(overrides.exclude_tags, base_config.exclude_tags)
-  return {
-    "ops_per_interval": _resolve_override_value(
+  return ResolvedTargetSettings(
+    ops_per_interval=_resolve_override_value(
       overrides.ops_per_interval, base_config.ops_per_interval
     ),
-    "interval_s": _resolve_override_value(overrides.interval_s, base_config.interval_s),
-    "item_revisit_timeout_s": _resolve_override_value(
+    interval_s=_resolve_override_value(overrides.interval_s, base_config.interval_s),
+    item_revisit_timeout_s=_resolve_override_value(
       overrides.item_revisit_timeout_s, base_config.item_revisit_s
     ),
-    "require_monitored": _resolve_override_value(
+    require_monitored=_resolve_override_value(
       overrides.require_monitored, base_config.require_monitored
     ),
-    "require_cutoff_unmet": _resolve_override_value(
+    require_cutoff_unmet=_resolve_override_value(
       overrides.require_cutoff_unmet, base_config.require_cutoff_unmet
     ),
-    "released_only": _resolve_override_value(overrides.released_only, base_config.released_only),
-    "search_backoff_s": _resolve_override_value(
+    released_only=_resolve_override_value(overrides.released_only, base_config.released_only),
+    search_backoff_s=_resolve_override_value(
       overrides.search_backoff_s, base_config.search_backoff_s
     ),
-    "max_searches_per_item_per_day": _resolve_override_value(
-      overrides.max_searches_per_item_per_day, base_config.max_searches_per_item_per_day
-    ),
-    "dry_run": _resolve_override_value(overrides.dry_run, base_config.dry_run),
-    "include_tags": _parse_csv_tags(include_tags_raw),
-    "exclude_tags": _parse_csv_tags(exclude_tags_raw),
-    "min_missing_episodes": _resolve_override_value(
+    dry_run=_resolve_override_value(overrides.dry_run, base_config.dry_run),
+    include_tags=coerce_tag_set(include_tags_raw),
+    exclude_tags=coerce_tag_set(exclude_tags_raw),
+    min_missing_episodes=_resolve_override_value(
       overrides.min_missing_episodes, base_config.min_missing_episodes
     ),
-    "min_missing_percent": _resolve_override_value(
+    min_missing_percent=_resolve_override_value(
       overrides.min_missing_percent, base_config.min_missing_percent
     ),
-  }
+  )
 
 
 class ArrType(StrEnum):
@@ -127,10 +145,9 @@ class ArrTarget(BaseModel):
   require_cutoff_unmet: bool = True
   released_only: bool = False
   search_backoff_s: int = Field(default=0, ge=0)
-  max_searches_per_item_per_day: int = Field(default=0, ge=0)
   dry_run: bool = False
-  include_tags: list[str] = Field(default_factory=list)
-  exclude_tags: list[str] = Field(default_factory=list)
+  include_tags: set[str] = Field(default_factory=set)
+  exclude_tags: set[str] = Field(default_factory=set)
   min_missing_episodes: int = Field(default=0, ge=0)
   min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
   _logging_ids: dict[str, str] | None = None
@@ -164,31 +181,22 @@ class ArrTarget(BaseModel):
 
   @field_validator("include_tags", "exclude_tags", mode="before")
   @classmethod
-  def normalize_tags(cls, v: object) -> list[str]:
-    """Normalize include/exclude tags from CSV string or list."""
-    if isinstance(v, str):
-      return _parse_csv_tags(v)
-    if isinstance(v, list):
-      normalized_tags: list[str] = []
-      seen: set[str] = set()
-      for raw_tag in v:
-        normalized_tag = str(raw_tag).strip()
-        if not normalized_tag:
-          continue
-        if normalized_tag in seen:
-          continue
-        seen.add(normalized_tag)
-        normalized_tags.append(normalized_tag)
-      return normalized_tags
-    if v is None:
-      return []
-    raise ValueError("include_tags and exclude_tags must be a CSV string or list")
+  def normalize_tags(cls, v: object) -> set[str]:
+    """Normalize include/exclude tags from CSV or iterable values."""
+    return coerce_tag_set(v)
 
   def logging_ids(self) -> dict[str, str]:
     """Return logging identifiers for the target."""
     if self._logging_ids is None:
       self._logging_ids = {"target_name": self.name, "target_type": self.arr_type.value}
     return self._logging_ids
+
+  def config_logging_tags(self) -> dict[str, Any]:
+    """Return target configuration values suitable for logging."""
+    tags = self.model_dump(mode="json", exclude={"api_key"})
+    tags["include_tags"] = sorted(self.include_tags)
+    tags["exclude_tags"] = sorted(self.exclude_tags)
+    return tags
 
 
 class TargetOverrideSettings(BaseSettings):
@@ -203,12 +211,19 @@ class TargetOverrideSettings(BaseSettings):
   require_cutoff_unmet: bool | None = None
   released_only: bool | None = None
   search_backoff_s: int | None = Field(default=None, ge=0)
-  max_searches_per_item_per_day: int | None = Field(default=None, ge=0)
   dry_run: bool | None = None
-  include_tags: str | None = None
-  exclude_tags: str | None = None
+  include_tags: set[str] | None = None
+  exclude_tags: set[str] | None = None
   min_missing_episodes: int | None = Field(default=None, ge=0)
   min_missing_percent: float | None = Field(default=None, ge=0.0, le=100.0)
+
+  @field_validator("include_tags", "exclude_tags", mode="before")
+  @classmethod
+  def normalize_optional_tags(cls, v: object) -> set[str] | None:
+    """Normalize include/exclude tags to sets when overrides are present."""
+    if v is None:
+      return None
+    return coerce_tag_set(v)
 
 
 class Config(BaseSettings):
@@ -232,10 +247,9 @@ class Config(BaseSettings):
   require_cutoff_unmet: bool = True
   released_only: bool = False
   search_backoff_s: int = Field(default=0, ge=0)
-  max_searches_per_item_per_day: int = Field(default=0, ge=0)
   dry_run: bool = False
-  include_tags: str = ""
-  exclude_tags: str = ""
+  include_tags: set[str] = Field(default_factory=set)
+  exclude_tags: set[str] = Field(default_factory=set)
   min_missing_episodes: int = Field(default=0, ge=0)
   min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
@@ -255,6 +269,12 @@ class Config(BaseSettings):
       return str(result)
     result = logging.getLevelName(logging.INFO)
     return str(result)
+
+  @field_validator("include_tags", "exclude_tags", mode="before")
+  @classmethod
+  def normalize_global_tags(cls, v: object) -> set[str]:
+    """Normalize global include/exclude tags."""
+    return coerce_tag_set(v)
 
   @field_validator("metrics_address")
   @classmethod
@@ -353,33 +373,19 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       if override_data
       else TargetOverrideSettings()
     )
+    resolved_settings = _build_target_settings(base_config, overrides)
 
     target = ArrTarget(
       name=env_dict[name_key],
       arr_type=arr_type,
       base_url=env_dict[baseurl_key],
       api_key=env_dict[apikey_key],
-      **_build_target_settings(base_config, overrides),
+      **resolved_settings.to_dict(),
     )
     logger.debug(
       "Target configuration created",
       index=n,
-      name=target.name,
-      arr_type=target.arr_type.value,
-      base_url=target.base_url,
-      ops_per_interval=target.ops_per_interval,
-      interval_s=target.interval_s,
-      item_revisit_timeout_s=target.item_revisit_timeout_s,
-      require_monitored=target.require_monitored,
-      require_cutoff_unmet=target.require_cutoff_unmet,
-      released_only=target.released_only,
-      search_backoff_s=target.search_backoff_s,
-      max_searches_per_item_per_day=target.max_searches_per_item_per_day,
-      dry_run=target.dry_run,
-      include_tags=target.include_tags,
-      exclude_tags=target.exclude_tags,
-      min_missing_episodes=target.min_missing_episodes,
-      min_missing_percent=target.min_missing_percent,
+      **target.config_logging_tags(),
     )
     targets.append(target)
     n += 1

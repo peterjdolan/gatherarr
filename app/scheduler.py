@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
@@ -21,7 +21,8 @@ from app.metrics import (
   skips_total,
   state_write_failures_total,
 )
-from app.state import ItemState, RunStatus, StateManager, TargetState
+from app.state import ItemState, ItemStatus, RunStatus, StateManager, TargetState
+from app.tag_utils import extract_item_tags, tag_filter
 
 logger = structlog.get_logger()
 
@@ -44,33 +45,6 @@ def _parse_utc_datetime(value: Any) -> datetime | None:
   if parsed.tzinfo is None:
     return parsed.replace(tzinfo=timezone.utc)
   return parsed.astimezone(timezone.utc)
-
-
-def _normalize_item_tags(item: dict[str, Any]) -> set[str]:
-  """Extract and normalize item tags for include/exclude filtering."""
-  raw_tags = item.get("tags")
-  if not isinstance(raw_tags, list):
-    return set()
-
-  normalized_tags: set[str] = set()
-  for raw_tag in raw_tags:
-    normalized_tag = str(raw_tag).strip()
-    if normalized_tag:
-      normalized_tags.add(normalized_tag)
-  return normalized_tags
-
-
-def _item_matches_tag_filters(
-  item: dict[str, Any], include_tags: list[str], exclude_tags: list[str]
-) -> bool:
-  """Return True if item tags satisfy include/exclude filters."""
-  item_tags = _normalize_item_tags(item)
-
-  if include_tags and not any(tag in item_tags for tag in include_tags):
-    return False
-  if exclude_tags and any(tag in item_tags for tag in exclude_tags):
-    return False
-  return True
 
 
 @dataclass
@@ -287,10 +261,7 @@ class Scheduler:
       tasks = []
       for target in self.config_targets:
         target_state = self.state_manager.get_target_state(target.name)
-        now = time.time()
-        time_since_last = now - target_state.last_run_timestamp
-
-        if time_since_last >= target.interval_s:
+        if time.time() - target_state.last_run_timestamp >= target.interval_s:
           tasks.append(self.run_once(target))
 
       if tasks:
@@ -305,62 +276,6 @@ class Scheduler:
     """Stop the scheduler."""
     self.running = False
     logger.debug("Scheduler stopped")
-
-  @staticmethod
-  def _day_start_timestamp(timestamp: float) -> float:
-    """Round a timestamp down to the UTC day boundary."""
-    seconds_per_day = 86400.0
-    return float(int(timestamp // seconds_per_day) * int(seconds_per_day))
-
-  def _is_daily_limit_reached(
-    self,
-    target: ArrTarget,
-    item_state: ItemState | None,
-    current_timestamp: float,
-  ) -> bool:
-    """Return True when max daily searches for an item has been reached."""
-    if item_state is None:
-      return False
-    if target.max_searches_per_item_per_day <= 0:
-      return False
-
-    current_day_start = self._day_start_timestamp(current_timestamp)
-    if item_state.search_day_start_timestamp != current_day_start:
-      return False
-
-    return item_state.search_count_in_day >= target.max_searches_per_item_per_day
-
-  def _build_item_state(
-    self,
-    item_id: str,
-    previous_item_state: ItemState | None,
-    processed_timestamp: float,
-    last_result: str,
-    last_status: str,
-    increment_search_count: bool,
-  ) -> ItemState:
-    """Build the next item state while preserving daily counters."""
-    day_start_timestamp = 0.0
-    search_count_in_day = 0
-    if previous_item_state is not None:
-      day_start_timestamp = previous_item_state.search_day_start_timestamp
-      search_count_in_day = previous_item_state.search_count_in_day
-
-    if increment_search_count:
-      current_day_start = self._day_start_timestamp(processed_timestamp)
-      if day_start_timestamp != current_day_start:
-        day_start_timestamp = current_day_start
-        search_count_in_day = 0
-      search_count_in_day += 1
-
-    return ItemState(
-      item_id=item_id,
-      last_processed_timestamp=processed_timestamp,
-      last_result=last_result,
-      last_status=last_status,
-      search_day_start_timestamp=day_start_timestamp,
-      search_count_in_day=search_count_in_day,
-    )
 
   async def _process_items(
     self,
@@ -413,10 +328,12 @@ class Scheduler:
       if item_state is not None:
         item_logging_ids.update(item_state.logging_ids())
 
-      now = time.time()
       if item_state is not None:
-        time_since_last = now - item_state.last_processed_timestamp
-        if item_state.last_status == "success" and time_since_last < target.item_revisit_timeout_s:
+        time_since_last = time.time() - item_state.last_processed_timestamp
+        if (
+          item_state.last_status == ItemStatus.SUCCESS
+          and time_since_last < target.item_revisit_timeout_s
+        ):
           logger.debug(
             "Skipping item (revisit timeout not met)",
             time_since_last=time_since_last,
@@ -425,7 +342,7 @@ class Scheduler:
           )
           skips_total.labels(target=target.name, type=target.arr_type.value).inc()
           continue
-        if item_state.last_status != "success" and target.search_backoff_s > 0:
+        if item_state.last_status != ItemStatus.SUCCESS and target.search_backoff_s > 0:
           if time_since_last < target.search_backoff_s:
             logger.debug(
               "Skipping item (search backoff not met)",
@@ -435,15 +352,6 @@ class Scheduler:
             )
             skips_total.labels(target=target.name, type=target.arr_type.value).inc()
             continue
-
-      if self._is_daily_limit_reached(target, item_state, now):
-        logger.debug(
-          "Skipping item (daily search limit reached)",
-          max_searches_per_item_per_day=target.max_searches_per_item_per_day,
-          **item_logging_ids,
-        )
-        skips_total.labels(target=target.name, type=target.arr_type.value).inc()
-        continue
 
       if not item_handler.should_search(item):
         logger.debug(
@@ -455,15 +363,22 @@ class Scheduler:
 
       if target.dry_run:
         dry_run_timestamp = time.time()
-        dry_run_state = self._build_item_state(
-          item_id=item_id_str,
-          previous_item_state=item_state,
-          processed_timestamp=dry_run_timestamp,
-          last_result="dry_run_search_eligible",
-          last_status="success",
-          increment_search_count=True,
-        )
+        if item_state is None:
+          dry_run_state = ItemState(
+            item_id=item_id_str,
+            last_processed_timestamp=dry_run_timestamp,
+            last_result="dry_run_search_eligible",
+            last_status=ItemStatus.SUCCESS,
+          )
+        else:
+          dry_run_state = replace(
+            item_state,
+            last_processed_timestamp=dry_run_timestamp,
+            last_result="dry_run_search_eligible",
+            last_status=ItemStatus.SUCCESS,
+          )
         target_state.items[item_id_str] = dry_run_state
+        item_state = dry_run_state
         item_logging_ids.update(dry_run_state.logging_ids())
 
         processed += 1
@@ -490,16 +405,23 @@ class Scheduler:
           request_duration
         )
 
-        item_state = self._build_item_state(
-          item_id=item_id_str,
-          previous_item_state=item_state,
-          processed_timestamp=request_end,
-          last_result="search_triggered",
-          last_status="success",
-          increment_search_count=True,
-        )
-        target_state.items[item_id_str] = item_state
-        item_logging_ids.update(item_state.logging_ids())
+        if item_state is None:
+          updated_state = ItemState(
+            item_id=item_id_str,
+            last_processed_timestamp=request_end,
+            last_result="search_triggered",
+            last_status=ItemStatus.SUCCESS,
+          )
+        else:
+          updated_state = replace(
+            item_state,
+            last_processed_timestamp=request_end,
+            last_result="search_triggered",
+            last_status=ItemStatus.SUCCESS,
+          )
+        target_state.items[item_id_str] = updated_state
+        item_state = updated_state
+        item_logging_ids.update(updated_state.logging_ids())
 
         grabs_total.labels(target=target.name, type=target.arr_type.value).inc()
         processed += 1
@@ -512,15 +434,22 @@ class Scheduler:
         )
       except Exception as e:
         error_timestamp = time.time()
-        failed_state = self._build_item_state(
-          item_id=item_id_str,
-          previous_item_state=item_state,
-          processed_timestamp=error_timestamp,
-          last_result="search_failed",
-          last_status="error",
-          increment_search_count=True,
-        )
+        if item_state is None:
+          failed_state = ItemState(
+            item_id=item_id_str,
+            last_processed_timestamp=error_timestamp,
+            last_result="search_failed",
+            last_status=ItemStatus.ERROR,
+          )
+        else:
+          failed_state = replace(
+            item_state,
+            last_processed_timestamp=error_timestamp,
+            last_result="search_failed",
+            last_status=ItemStatus.ERROR,
+          )
         target_state.items[item_id_str] = failed_state
+        item_state = failed_state
         item_logging_ids.update(failed_state.logging_ids())
 
         logger.exception(
@@ -551,7 +480,11 @@ class MovieHandler:
       return False
     if self.target.require_cutoff_unmet and not self._is_cutoff_unmet(item):
       return False
-    if not _item_matches_tag_filters(item, self.target.include_tags, self.target.exclude_tags):
+    if not tag_filter(
+      extract_item_tags(item),
+      self.target.include_tags,
+      self.target.exclude_tags,
+    ):
       return False
     if self.target.released_only and not self._is_released(item):
       return False
@@ -648,7 +581,11 @@ class SeriesHandler:
       return False
     if self.target.require_cutoff_unmet and not self._is_cutoff_unmet(item):
       return False
-    if not _item_matches_tag_filters(item, self.target.include_tags, self.target.exclude_tags):
+    if not tag_filter(
+      extract_item_tags(item),
+      self.target.include_tags,
+      self.target.exclude_tags,
+    ):
       return False
     if self.target.released_only and not self._is_released(item):
       return False

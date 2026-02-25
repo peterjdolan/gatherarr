@@ -80,7 +80,6 @@ Configuration is done by environment variables only. Docker Compose users are we
 - `GTH_REQUIRE_CUTOFF_UNMET`: (Optional) Require quality cutoff to be unmet before searching (default `true`).
 - `GTH_RELEASED_ONLY`: (Optional) Search only released items (default `false`).
 - `GTH_SEARCH_BACKOFF_S`: (Optional) Backoff seconds for retrying items after failed searches (default `0`, disabled).
-- `GTH_MAX_SEARCHES_PER_ITEM_PER_DAY`: (Optional) Daily cap per item (default `0`, disabled).
 - `GTH_DRY_RUN`: (Optional) Evaluate eligibility without triggering search commands (default `false`).
 - `GTH_INCLUDE_TAGS`: (Optional) Comma-separated tags to include.
 - `GTH_EXCLUDE_TAGS`: (Optional) Comma-separated tags to exclude.
@@ -101,7 +100,6 @@ Configuration is done by environment variables only. Docker Compose users are we
 - `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`: (Optional override) Require quality cutoff unmet.
 - `GTH_ARR_<n>_RELEASED_ONLY`: (Optional override) Search only released items.
 - `GTH_ARR_<n>_SEARCH_BACKOFF_S`: (Optional override) Backoff seconds after failed searches.
-- `GTH_ARR_<n>_MAX_SEARCHES_PER_ITEM_PER_DAY`: (Optional override) Daily cap per item.
 - `GTH_ARR_<n>_DRY_RUN`: (Optional override) Enable dry-run mode for this instance.
 - `GTH_ARR_<n>_INCLUDE_TAGS`: (Optional override) Comma-separated tags that must match.
 - `GTH_ARR_<n>_EXCLUDE_TAGS`: (Optional override) Comma-separated tags to skip.
