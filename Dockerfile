@@ -1,5 +1,5 @@
 # Builder stage
-FROM hardened-images/dhi/python:3.14-dev AS builder
+FROM dhi.io/python:3.14-dev AS builder
 
 WORKDIR /build
 
@@ -19,7 +19,7 @@ RUN if [ -f uv.lock ]; then \
     fi
 
 # Runtime stage
-FROM hardened-images/dhi/python:3.14
+FROM dhi.io/python:3.14
 
 WORKDIR /app
 
