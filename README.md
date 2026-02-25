@@ -31,6 +31,21 @@ services:
 docker compose up --build gatherarr
 ```
 
+## Docker Hub Image Publishing (GitHub Actions)
+
+The repository publishes images to Docker Hub at `astrocatcmdr/gatherarr` using `.github/workflows/docker-image.yml`.
+
+To enable pushes from GitHub Actions, configure these repository secrets:
+
+- `DOCKERHUB_USERNAME`: Docker Hub account name (for this repository, `astrocatcmdr`)
+- `DOCKERHUB_TOKEN`: Docker Hub access token with write access to `astrocatcmdr/gatherarr`
+
+Pull the published image with:
+
+```bash
+docker pull astrocatcmdr/gatherarr:latest
+```
+
 ## Goals and Non-Goals
 
 ### Goals
