@@ -69,6 +69,7 @@ Configuration is done by environment variables only. Docker Compose users are we
 
 ### Global configuration
 
+- `GTH_LOG_LEVEL`: (Optional) log verbosity, `debug|info|warn|error`, default `info`.
 - `GTH_METRICS_ENABLED`: (Optional) Whether or not to host the metrics endpoint (true/false).
 - `GTH_METRICS_ADDRESS`: (Optional) Metrics endpoint listen address (default `0.0.0.0`).
 - `GTH_METRICS_PORT`: (Optional) Metrics endpoint port (default 9090).
