@@ -7,9 +7,9 @@ from typing import Any, Protocol
 
 import structlog
 
+from app.action_logging import Action, log_movie_action, log_season_action
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
-from app.logging import Action, log_movie_action, log_season_action
 from app.metrics import (
   grabs_total,
   last_success_timestamp_seconds,
