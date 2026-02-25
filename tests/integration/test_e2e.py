@@ -22,7 +22,7 @@ from app.config import ArrTarget, ArrType
 from app.http_client import HttpxClient
 from app.main import create_web_app
 from app.scheduler import MovieId, Scheduler, SeasonId
-from app.state import FileStateStorage, RunStatus, StateManager
+from app.state import FileStateStorage, StateManager
 
 RouteKey = tuple[str, str]
 
