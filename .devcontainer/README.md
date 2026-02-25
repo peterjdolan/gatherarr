@@ -9,7 +9,7 @@ This directory contains the configuration for VS Code Dev Containers.
 
 ## Features
 
-- Python 3.12 pre-installed
+- Python 3.14 pre-installed
 - `uv` package manager for fast dependency management
 - Automatic dependency installation on container creation
 - VS Code extensions pre-configured (Python, Pylance, Ruff)

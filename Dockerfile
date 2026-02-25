@@ -1,5 +1,5 @@
 # Builder stage
-FROM python:3.13-slim AS builder
+FROM dhi.io/python:3.14-dev AS builder
 
 WORKDIR /build
 
@@ -19,14 +19,9 @@ RUN if [ -f uv.lock ]; then \
     fi
 
 # Runtime stage
-FROM python:3.13-slim
+FROM dhi.io/python:3.14
 
 WORKDIR /app
-
-# Install curl for healthcheck
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/*
 
 # Copy the virtual environment from builder
 # uv creates .venv in the working directory
@@ -42,8 +37,8 @@ ENV PYTHONPATH="/app"
 # Expose port
 EXPOSE 9090
 
-# Health check
+# Health check using Python (hardened images don't include curl)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:9090/health || exit 1
+  CMD /app/.venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:9090/health').read()" || exit 1
 
 CMD ["/app/.venv/bin/python", "app/main.py"]
