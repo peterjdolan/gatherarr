@@ -535,7 +535,9 @@ class TestTargetOverrideSettings:
 
   def test_target_override_parses_csv_tags_to_sets(self) -> None:
     """Test that TargetOverrideSettings parses CSV tags into sets."""
-    settings = TargetOverrideSettings(include_tags="a, b, a", exclude_tags="skip")
+    settings = TargetOverrideSettings.model_validate(
+      {"include_tags": "a, b, a", "exclude_tags": "skip"}
+    )
     assert settings.include_tags == {"a", "b"}
     assert settings.exclude_tags == {"skip"}
 
