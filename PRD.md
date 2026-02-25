@@ -70,7 +70,10 @@ with low operational complexity.
 
 - Apply explicit timeouts for all external HTTP calls.
 - Retry only retryable failures (`network`, `5xx`, `429`).
+- Use a logging redaction layer to mask API key parameters in all structured log output.
 - Never log API keys or full auth headers.
+- `/metrics` is served without built-in authentication; deployments that need auth MUST enforce it via external auth controls and/or network access restrictions.
+- If a target `base_url` uses plain HTTP, API keys are transmitted in cleartext over the network; use HTTPS wherever possible.
 - Graceful shutdown should finish in-flight work or stop within timeout.
 - Container runtime must run as non-root.
 

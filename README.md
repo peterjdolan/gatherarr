@@ -28,11 +28,11 @@ services:
       GTH_ARR_0_TYPE: radarr
       GTH_ARR_0_NAME: Radarr
       GTH_ARR_0_BASEURL: http://radarr:7878
-      GTH_ARR_0_APIKEY: 059b34da8966442aab57fd2e3debfa9b
+      GTH_ARR_0_APIKEY: FAKE_RADARR_API_KEY_REPLACE_ME
       GTH_ARR_1_TYPE: sonarr
       GTH_ARR_1_NAME: Sonarr
       GTH_ARR_1_BASEURL: http://sonarr:8989
-      GTH_ARR_1_APIKEY: 71bc23f90cb44eb3a22d5d8b01f99e5b
+      GTH_ARR_1_APIKEY: FAKE_SONARR_API_KEY_REPLACE_ME
 ```
 
 3. Start Gatherarr:
@@ -66,6 +66,12 @@ docker compose up --build gatherarr
 ## Configuration
 
 Configuration is done by environment variables only. Docker Compose users are welcome to use `.env` files for configuration management, and Docker Secrets to manage sensitive API tokens.
+
+## Security Notes
+
+- `API_KEY` values are redacted from structured log statements and emitted as `[REDACTED]`.
+- Gatherarr serves `/metrics` without built-in authentication when metrics are enabled. If authentication is required, place Gatherarr behind an external authentication or authorization layer (for example, a reverse proxy with auth controls) and/or network-level access controls.
+- Gatherarr sends `X-Api-Key` to each configured `*arr` target. If `GTH_ARR_<n>_BASEURL` uses `http://` instead of `https://`, that API key is transmitted in cleartext over the network.
 
 ### Global configuration
 
