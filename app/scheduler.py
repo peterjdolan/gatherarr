@@ -148,27 +148,20 @@ class Scheduler:
       "run_id": f"{target.name}-{int(run_start)}",
       "run_start_timestamp": run_start,
     }
+    combined_logging_ids = {**run_logging_ids, **target.logging_ids(), **target_state.logging_ids()}
 
-    logger.debug(
-      "Starting run", **run_logging_ids, **target.logging_ids(), **target_state.logging_ids()
-    )
+    logger.debug("Starting run", **combined_logging_ids)
 
     try:
       client = self.arr_clients[target.name]
 
-      client_run_logging_ids = {
-        **run_logging_ids,
-        **target.logging_ids(),
-        **target_state.logging_ids(),
-      }
-
-      logger.debug("Fetching items", **client_run_logging_ids)
+      logger.debug("Fetching items", **combined_logging_ids)
       handler: ItemHandler
       if target.arr_type == ArrType.RADARR:
-        items = await client.get_movies(client_run_logging_ids)
+        items = await client.get_movies(combined_logging_ids)
         handler = MovieHandler()
       elif target.arr_type == ArrType.SONARR:
-        items = await client.get_series(client_run_logging_ids)
+        items = await client.get_series(combined_logging_ids)
         handler = SeriesHandler()
       else:
         raise ValueError(f"Unsupported target type: {target.arr_type}")
@@ -176,11 +169,16 @@ class Scheduler:
       logger.debug(
         "Items fetched",
         item_count=len(items),
-        **client_run_logging_ids,
+        **combined_logging_ids,
       )
 
       processed = await self._process_items(
-        target, client, items, target_state, handler, run_logging_ids
+        target,
+        client,
+        items,
+        target_state,
+        handler,
+        run_logging_ids,
       )
 
       run_end = time.time()
@@ -189,6 +187,7 @@ class Scheduler:
       target_state.last_success_timestamp = time.time()
       target_state.last_status = RunStatus.SUCCESS
       target_state.consecutive_failures = 0
+      combined_logging_ids.update(target_state.logging_ids())
 
       last_success_timestamp_seconds.labels(target=target.name, type=target.arr_type.value).set(
         run_end
@@ -200,13 +199,14 @@ class Scheduler:
         status="success",
         processed=processed,
         duration_s=duration_s,
-        **run_logging_ids,
+        **combined_logging_ids,
       )
     except Exception as e:
       duration_s = time.time() - run_start
 
       target_state.last_status = RunStatus.ERROR
       target_state.consecutive_failures += 1
+      combined_logging_ids.update(target_state.logging_ids())
 
       run_total.labels(target=target.name, type=target.arr_type.value, status="error").inc()
       request_errors_total.labels(target=target.name, type=target.arr_type.value).inc()
@@ -216,7 +216,7 @@ class Scheduler:
         exception=e,
         status="error",
         duration_s=duration_s,
-        **run_logging_ids,
+        **combined_logging_ids,
       )
 
     self.state_manager.state.total_runs += 1
@@ -267,12 +267,17 @@ class Scheduler:
     processed = 0
     ops_count = 0
 
-    logger.debug(
-      "Processing items",
-      total_items=len(items),
+    # Combine all logging IDs for processing items
+    process_logging_ids = {
       **logging_ids,
       **target.logging_ids(),
       **target_state.logging_ids(),
+    }
+
+    logger.debug(
+      "Processing items",
+      total_items=len(items),
+      **process_logging_ids,
     )
 
     for item in items:
@@ -280,20 +285,12 @@ class Scheduler:
         logger.debug(
           "Reached ops_per_interval limit",
           ops_count=ops_count,
-          **logging_ids,
-          **target.logging_ids(),
-          **target_state.logging_ids(),
+          **process_logging_ids,
         )
         break
 
-      handler_logging_ids = {
-        **logging_ids,
-        **target.logging_ids(),
-        **target_state.logging_ids(),
-      }
-
       item_logging_ids = {
-        **handler_logging_ids,
+        **process_logging_ids,
         **item_handler.extract_logging_id(item),
       }
       item_id = item_handler.extract_item_id(item)
@@ -326,7 +323,7 @@ class Scheduler:
         await item_handler.search(
           client=client,
           item=item,
-          logging_ids=handler_logging_ids,
+          logging_ids=process_logging_ids,
         )
         request_end = time.time()
         request_duration = request_end - request_start
@@ -364,9 +361,7 @@ class Scheduler:
       "Finished processing items",
       processed=processed,
       total_items=len(items),
-      **logging_ids,
-      **target.logging_ids(),
-      **target_state.logging_ids(),
+      **process_logging_ids,
     )
     return processed
 
