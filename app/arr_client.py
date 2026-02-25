@@ -79,7 +79,7 @@ class ArrClient:
     self,
     method: str,
     url: str,
-    logging_ids: dict[str, str],
+    logging_ids: dict[str, Any],
     payload: dict[str, Any] | None = None,
   ) -> Any:
     """Make HTTP request with retry logic using tenacity."""
@@ -213,7 +213,6 @@ class ArrClient:
     """Trigger search for a series in Sonarr."""
     if self.target.arr_type != ArrType.SONARR:
       raise ValueError(f"search_series() only supported for sonarr, got {self.target.arr_type}")
-    from app.scheduler import SeriesId
 
     url = f"{self.base_url}/api/v3/command"
     payload = {"name": "SeriesSearch", "seriesId": series_id.series_id}

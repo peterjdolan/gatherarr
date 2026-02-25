@@ -58,7 +58,7 @@ with low operational complexity.
 - Include correlation fields: `target_name`, `target_type`, `run_id`.
 - For item-related actions, include:
   - Movies: `movie_id` field
-  - Series: `series_id` and `season_id` fields (season_id may be null for series-wide operations)
+  - Series: `series_id` field (season_id support is planned for future development)
 
 ## Reliability and Security Requirements
 

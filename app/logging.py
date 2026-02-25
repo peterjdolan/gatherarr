@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 if TYPE_CHECKING:
-  from app.scheduler import MovieId, SeriesId
+  from app.scheduler import ItemId, MovieId, SeriesId
 
 
 class Action(StrEnum):
@@ -21,6 +21,7 @@ class Action(StrEnum):
 def log_item_action(
   logger: structlog.BoundLogger,
   action: Action,
+  item_id: ItemId,
   **kwargs: Any,
 ) -> None:
   """Helper function to log an item-related action with correlation fields at INFO level.
@@ -30,7 +31,7 @@ def log_item_action(
     action: Action description/message
     **kwargs: Additional fields to include in the log entry (e.g., run_id, target_name, arr_type, movie_id, series_id, season_id)
   """
-  logger.info(action=action.value, **kwargs)
+  logger.info(action=action.value, **kwargs, **item_id.logging_ids())
 
 
 def log_movie_action(
@@ -50,7 +51,7 @@ def log_movie_action(
   log_item_action(
     logger=logger,
     action=action,
-    movie_id=movie_id,
+    item_id=movie_id,
     **kwargs,
   )
 
@@ -61,7 +62,7 @@ def log_series_action(
   series_id: "SeriesId",
   **kwargs: Any,
 ) -> None:
-  """Log a series-related action with required series_id and season_id correlation fields at INFO level.
+  """Log a series-related action with required series_id correlation field at INFO level.
 
   Args:
     logger: The structlog logger instance to use
@@ -72,6 +73,6 @@ def log_series_action(
   log_item_action(
     logger=logger,
     action=action,
-    series_id=series_id,
+    item_id=series_id,
     **kwargs,
   )

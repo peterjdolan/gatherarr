@@ -109,7 +109,7 @@ class ItemHandler(Protocol):
     self,
     client: ArrClient,
     item: dict[str, Any],
-    logging_ids: dict[str, str],
+    logging_ids: dict[str, Any],
   ) -> None:
     """Trigger search for the item and log the action."""
     ...
@@ -299,7 +299,8 @@ class Scheduler:
       item_state = target_state.items.get(item_id_str)
 
       item_logging_ids.update(item_id.logging_ids())
-      item_logging_ids.update(item_state.logging_ids())
+      if item_state is not None:
+        item_logging_ids.update(item_state.logging_ids())
 
       if item_state is not None:
         time_since_last = time.time() - item_state.last_processed_timestamp
@@ -394,7 +395,7 @@ class MovieHandler:
     self,
     client: ArrClient,
     item: dict[str, Any],
-    logging_ids: dict[str, str],
+    logging_ids: dict[str, Any],
   ) -> None:
     """Trigger search for a movie and log the action."""
 
@@ -448,7 +449,7 @@ class SeriesHandler:
     self,
     client: ArrClient,
     item: dict[str, Any],
-    logging_ids: dict[str, str],
+    logging_ids: dict[str, Any],
   ) -> None:
     """Trigger search for a series and log the action."""
 
