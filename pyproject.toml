@@ -24,6 +24,7 @@ dev = [
   "pytest-timeout>=2.2.0",
   "ruff>=0.1.0",
   "types-pyyaml>=6.0.12",
+  "types-requests>=2.32.4.20260107",
 ]
 
 [tool.poe.tasks]

@@ -63,7 +63,7 @@ class OpenApiContract:
   def __init__(self, service_name: str, spec_path: Path) -> None:
     self.service_name = service_name
     self.spec_path = spec_path
-    self.openapi = OpenAPI.from_file_path(spec_path)
+    self.openapi = OpenAPI.from_file_path(str(spec_path))
 
   def validate_response(self, method: str, path: str, status_code: int, body: Any) -> None:
     """Validate a response body against the operation schema."""
