@@ -76,6 +76,16 @@ Configuration is done by environment variables only. Docker Compose users are we
 - `GTH_OPS_PER_INTERVAL`: (Optional) Common number of operations to perform per interval time, default 1.
 - `GTH_INTERVAL_S`: (Optional) Common interval duration in seconds, default 60.
 - `GTH_ITEM_REVISIT_S`: (Optional) Minimum time in seconds to wait before reprocessing a previously processed item. If not set, a default value is used (e.g., 86400 for 24 hours).
+- `GTH_REQUIRE_MONITORED`: (Optional) Require items to be monitored before searching (default `true`).
+- `GTH_REQUIRE_CUTOFF_UNMET`: (Optional) Require quality cutoff to be unmet before searching (default `true`).
+- `GTH_RELEASED_ONLY`: (Optional) Search only released items (default `false`).
+- `GTH_SEARCH_BACKOFF_S`: (Optional) Backoff seconds for retrying items after failed searches (default `0`, disabled).
+- `GTH_MAX_SEARCHES_PER_ITEM_PER_DAY`: (Optional) Daily cap per item (default `0`, disabled).
+- `GTH_DRY_RUN`: (Optional) Evaluate eligibility without triggering search commands (default `false`).
+- `GTH_INCLUDE_TAGS`: (Optional) Comma-separated tags to include.
+- `GTH_EXCLUDE_TAGS`: (Optional) Comma-separated tags to exclude.
+- `GTH_MIN_MISSING_EPISODES`: (Optional, Sonarr-oriented) Minimum missing episodes required to search (default `0`).
+- `GTH_MIN_MISSING_PERCENT`: (Optional, Sonarr-oriented) Minimum missing-episode percent required to search (default `0`).
 
 ### Per-target configuration
 
@@ -87,6 +97,16 @@ Configuration is done by environment variables only. Docker Compose users are we
 - `GTH_ARR_<n>_OPS_PER_INTERVAL`: (Optional override) Maximum number of operations to perform per interval.
 - `GTH_ARR_<n>_INTERVAL_S`: (Optional override) Interval in seconds.
 - `GTH_ARR_<n>_ITEM_REVISIT_TIMEOUT_S`: (Optional override) Minimum number of seconds to wait before reprocessing a previously processed item for this instance.
+- `GTH_ARR_<n>_REQUIRE_MONITORED`: (Optional override) Require monitored items only.
+- `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`: (Optional override) Require quality cutoff unmet.
+- `GTH_ARR_<n>_RELEASED_ONLY`: (Optional override) Search only released items.
+- `GTH_ARR_<n>_SEARCH_BACKOFF_S`: (Optional override) Backoff seconds after failed searches.
+- `GTH_ARR_<n>_MAX_SEARCHES_PER_ITEM_PER_DAY`: (Optional override) Daily cap per item.
+- `GTH_ARR_<n>_DRY_RUN`: (Optional override) Enable dry-run mode for this instance.
+- `GTH_ARR_<n>_INCLUDE_TAGS`: (Optional override) Comma-separated tags that must match.
+- `GTH_ARR_<n>_EXCLUDE_TAGS`: (Optional override) Comma-separated tags to skip.
+- `GTH_ARR_<n>_MIN_MISSING_EPISODES`: (Optional override, Sonarr-oriented) Minimum missing episodes.
+- `GTH_ARR_<n>_MIN_MISSING_PERCENT`: (Optional override, Sonarr-oriented) Minimum missing percentage.
 
 ## Development
 

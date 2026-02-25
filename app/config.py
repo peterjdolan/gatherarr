@@ -15,6 +15,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 logger = structlog.get_logger()
 
 
+def _parse_csv_tags(value: str) -> list[str]:
+  """Parse comma-separated tags into a normalized list."""
+  tags: list[str] = []
+  seen: set[str] = set()
+  for raw_tag in value.split(","):
+    normalized_tag = raw_tag.strip()
+    if not normalized_tag:
+      continue
+    if normalized_tag in seen:
+      continue
+    seen.add(normalized_tag)
+    tags.append(normalized_tag)
+  return tags
+
+
 class ArrType(StrEnum):
   """Supported *arr service types."""
 
@@ -32,6 +47,16 @@ class ArrTarget(BaseModel):
   ops_per_interval: int = Field(ge=1)
   interval_s: int = Field(ge=1)
   item_revisit_timeout_s: int = Field(ge=1)
+  require_monitored: bool = True
+  require_cutoff_unmet: bool = True
+  released_only: bool = False
+  search_backoff_s: int = Field(default=0, ge=0)
+  max_searches_per_item_per_day: int = Field(default=0, ge=0)
+  dry_run: bool = False
+  include_tags: list[str] = Field(default_factory=list)
+  exclude_tags: list[str] = Field(default_factory=list)
+  min_missing_episodes: int = Field(default=0, ge=0)
+  min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
   _logging_ids: dict[str, str] | None = None
 
   @field_validator("name")
@@ -61,6 +86,28 @@ class ArrTarget(BaseModel):
       raise ValueError(f"base_url must use http or https scheme, got: {parsed.scheme}")
     return v
 
+  @field_validator("include_tags", "exclude_tags", mode="before")
+  @classmethod
+  def normalize_tags(cls, v: object) -> list[str]:
+    """Normalize include/exclude tags from CSV string or list."""
+    if isinstance(v, str):
+      return _parse_csv_tags(v)
+    if isinstance(v, list):
+      normalized_tags: list[str] = []
+      seen: set[str] = set()
+      for raw_tag in v:
+        normalized_tag = str(raw_tag).strip()
+        if not normalized_tag:
+          continue
+        if normalized_tag in seen:
+          continue
+        seen.add(normalized_tag)
+        normalized_tags.append(normalized_tag)
+      return normalized_tags
+    if v is None:
+      return []
+    raise ValueError("include_tags and exclude_tags must be a CSV string or list")
+
   def logging_ids(self) -> dict[str, str]:
     """Return logging identifiers for the target."""
     if self._logging_ids is None:
@@ -76,6 +123,16 @@ class TargetOverrideSettings(BaseSettings):
   ops_per_interval: int | None = Field(default=None, ge=1)
   interval_s: int | None = Field(default=None, ge=1)
   item_revisit_timeout_s: int | None = Field(default=None, ge=1)
+  require_monitored: bool | None = None
+  require_cutoff_unmet: bool | None = None
+  released_only: bool | None = None
+  search_backoff_s: int | None = Field(default=None, ge=0)
+  max_searches_per_item_per_day: int | None = Field(default=None, ge=0)
+  dry_run: bool | None = None
+  include_tags: str | None = None
+  exclude_tags: str | None = None
+  min_missing_episodes: int | None = Field(default=None, ge=0)
+  min_missing_percent: float | None = Field(default=None, ge=0.0, le=100.0)
 
 
 class Config(BaseSettings):
@@ -95,6 +152,16 @@ class Config(BaseSettings):
   ops_per_interval: int = Field(default=1, ge=1)
   interval_s: int = Field(default=60, ge=1)
   item_revisit_s: int = Field(default=86400, ge=1)
+  require_monitored: bool = True
+  require_cutoff_unmet: bool = True
+  released_only: bool = False
+  search_backoff_s: int = Field(default=0, ge=0)
+  max_searches_per_item_per_day: int = Field(default=0, ge=0)
+  dry_run: bool = False
+  include_tags: str = ""
+  exclude_tags: str = ""
+  min_missing_episodes: int = Field(default=0, ge=0)
+  min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
 
   @field_validator("log_level")
@@ -210,6 +277,28 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       override_data["interval_s"] = env_dict[f"GTH_ARR_{n}_INTERVAL_S"]
     if f"GTH_ARR_{n}_ITEM_REVISIT_TIMEOUT_S" in env_dict:
       override_data["item_revisit_timeout_s"] = env_dict[f"GTH_ARR_{n}_ITEM_REVISIT_TIMEOUT_S"]
+    if f"GTH_ARR_{n}_REQUIRE_MONITORED" in env_dict:
+      override_data["require_monitored"] = env_dict[f"GTH_ARR_{n}_REQUIRE_MONITORED"]
+    if f"GTH_ARR_{n}_REQUIRE_CUTOFF_UNMET" in env_dict:
+      override_data["require_cutoff_unmet"] = env_dict[f"GTH_ARR_{n}_REQUIRE_CUTOFF_UNMET"]
+    if f"GTH_ARR_{n}_RELEASED_ONLY" in env_dict:
+      override_data["released_only"] = env_dict[f"GTH_ARR_{n}_RELEASED_ONLY"]
+    if f"GTH_ARR_{n}_SEARCH_BACKOFF_S" in env_dict:
+      override_data["search_backoff_s"] = env_dict[f"GTH_ARR_{n}_SEARCH_BACKOFF_S"]
+    if f"GTH_ARR_{n}_MAX_SEARCHES_PER_ITEM_PER_DAY" in env_dict:
+      override_data["max_searches_per_item_per_day"] = env_dict[
+        f"GTH_ARR_{n}_MAX_SEARCHES_PER_ITEM_PER_DAY"
+      ]
+    if f"GTH_ARR_{n}_DRY_RUN" in env_dict:
+      override_data["dry_run"] = env_dict[f"GTH_ARR_{n}_DRY_RUN"]
+    if f"GTH_ARR_{n}_INCLUDE_TAGS" in env_dict:
+      override_data["include_tags"] = env_dict[f"GTH_ARR_{n}_INCLUDE_TAGS"]
+    if f"GTH_ARR_{n}_EXCLUDE_TAGS" in env_dict:
+      override_data["exclude_tags"] = env_dict[f"GTH_ARR_{n}_EXCLUDE_TAGS"]
+    if f"GTH_ARR_{n}_MIN_MISSING_EPISODES" in env_dict:
+      override_data["min_missing_episodes"] = env_dict[f"GTH_ARR_{n}_MIN_MISSING_EPISODES"]
+    if f"GTH_ARR_{n}_MIN_MISSING_PERCENT" in env_dict:
+      override_data["min_missing_percent"] = env_dict[f"GTH_ARR_{n}_MIN_MISSING_PERCENT"]
 
     overrides = (
       TargetOverrideSettings.model_validate(override_data)
@@ -231,6 +320,34 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       item_revisit_timeout_s=overrides.item_revisit_timeout_s
       if overrides.item_revisit_timeout_s is not None
       else base_config.item_revisit_s,
+      require_monitored=overrides.require_monitored
+      if overrides.require_monitored is not None
+      else base_config.require_monitored,
+      require_cutoff_unmet=overrides.require_cutoff_unmet
+      if overrides.require_cutoff_unmet is not None
+      else base_config.require_cutoff_unmet,
+      released_only=overrides.released_only
+      if overrides.released_only is not None
+      else base_config.released_only,
+      search_backoff_s=overrides.search_backoff_s
+      if overrides.search_backoff_s is not None
+      else base_config.search_backoff_s,
+      max_searches_per_item_per_day=overrides.max_searches_per_item_per_day
+      if overrides.max_searches_per_item_per_day is not None
+      else base_config.max_searches_per_item_per_day,
+      dry_run=overrides.dry_run if overrides.dry_run is not None else base_config.dry_run,
+      include_tags=_parse_csv_tags(overrides.include_tags)
+      if overrides.include_tags is not None
+      else _parse_csv_tags(base_config.include_tags),
+      exclude_tags=_parse_csv_tags(overrides.exclude_tags)
+      if overrides.exclude_tags is not None
+      else _parse_csv_tags(base_config.exclude_tags),
+      min_missing_episodes=overrides.min_missing_episodes
+      if overrides.min_missing_episodes is not None
+      else base_config.min_missing_episodes,
+      min_missing_percent=overrides.min_missing_percent
+      if overrides.min_missing_percent is not None
+      else base_config.min_missing_percent,
     )
     logger.debug(
       "Target configuration created",
@@ -241,6 +358,16 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       ops_per_interval=target.ops_per_interval,
       interval_s=target.interval_s,
       item_revisit_timeout_s=target.item_revisit_timeout_s,
+      require_monitored=target.require_monitored,
+      require_cutoff_unmet=target.require_cutoff_unmet,
+      released_only=target.released_only,
+      search_backoff_s=target.search_backoff_s,
+      max_searches_per_item_per_day=target.max_searches_per_item_per_day,
+      dry_run=target.dry_run,
+      include_tags=target.include_tags,
+      exclude_tags=target.exclude_tags,
+      min_missing_episodes=target.min_missing_episodes,
+      min_missing_percent=target.min_missing_percent,
     )
     targets.append(target)
     n += 1

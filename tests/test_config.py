@@ -106,6 +106,16 @@ class TestLoadConfig:
     assert config.targets[0].arr_type == ArrType.RADARR
     assert config.targets[0].base_url == "http://localhost:7878"
     assert config.targets[0].api_key == "test-key"
+    assert config.targets[0].require_monitored is True
+    assert config.targets[0].require_cutoff_unmet is True
+    assert config.targets[0].released_only is False
+    assert config.targets[0].search_backoff_s == 0
+    assert config.targets[0].max_searches_per_item_per_day == 0
+    assert config.targets[0].dry_run is False
+    assert config.targets[0].include_tags == []
+    assert config.targets[0].exclude_tags == []
+    assert config.targets[0].min_missing_episodes == 0
+    assert config.targets[0].min_missing_percent == 0.0
     assert config.log_level == "INFO"
     assert config.metrics_enabled is True
     assert config.metrics_port == 9090
@@ -136,6 +146,47 @@ class TestLoadConfig:
       assert config.interval_s == 120
       assert config.targets[0].ops_per_interval == 10
       assert config.targets[0].interval_s == 300
+
+  def test_load_config_with_eligibility_overrides(self) -> None:
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_REQUIRE_MONITORED": "false",
+      "GTH_REQUIRE_CUTOFF_UNMET": "false",
+      "GTH_RELEASED_ONLY": "true",
+      "GTH_SEARCH_BACKOFF_S": "120",
+      "GTH_MAX_SEARCHES_PER_ITEM_PER_DAY": "2",
+      "GTH_DRY_RUN": "true",
+      "GTH_INCLUDE_TAGS": "global_tag",
+      "GTH_EXCLUDE_TAGS": "global_block",
+      "GTH_MIN_MISSING_EPISODES": "1",
+      "GTH_MIN_MISSING_PERCENT": "5.0",
+      "GTH_ARR_0_TYPE": "sonarr",
+      "GTH_ARR_0_NAME": "sonarr1",
+      "GTH_ARR_0_BASEURL": "http://sonarr:8989",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_0_REQUIRE_MONITORED": "true",
+      "GTH_ARR_0_REQUIRE_CUTOFF_UNMET": "true",
+      "GTH_ARR_0_RELEASED_ONLY": "false",
+      "GTH_ARR_0_SEARCH_BACKOFF_S": "300",
+      "GTH_ARR_0_MAX_SEARCHES_PER_ITEM_PER_DAY": "5",
+      "GTH_ARR_0_DRY_RUN": "false",
+      "GTH_ARR_0_INCLUDE_TAGS": "anime, 4k, anime",
+      "GTH_ARR_0_EXCLUDE_TAGS": "paused",
+      "GTH_ARR_0_MIN_MISSING_EPISODES": "3",
+      "GTH_ARR_0_MIN_MISSING_PERCENT": "20.5",
+    }
+    config = load_config(env)
+    target = config.targets[0]
+    assert target.require_monitored is True
+    assert target.require_cutoff_unmet is True
+    assert target.released_only is False
+    assert target.search_backoff_s == 300
+    assert target.max_searches_per_item_per_day == 5
+    assert target.dry_run is False
+    assert target.include_tags == ["anime", "4k"]
+    assert target.exclude_tags == ["paused"]
+    assert target.min_missing_episodes == 3
+    assert target.min_missing_percent == 20.5
 
   def test_load_multiple_targets(self) -> None:
     env = {
@@ -244,6 +295,21 @@ class TestArrTarget:
         ops_per_interval=ops_per_interval,
         interval_s=interval_s,
         item_revisit_timeout_s=item_revisit_timeout_s,
+      )
+
+  @pytest.mark.parametrize("min_missing_percent", [-1.0, 101.0])
+  def test_arr_target_validates_missing_percent_range(self, min_missing_percent: float) -> None:
+    """Test that ArrTarget validates min_missing_percent between 0 and 100."""
+    with pytest.raises(ValidationError):
+      ArrTarget(
+        name="test",
+        arr_type=ArrType.SONARR,
+        base_url="http://localhost:8989",
+        api_key="test-key",
+        ops_per_interval=1,
+        interval_s=60,
+        item_revisit_timeout_s=3600,
+        min_missing_percent=min_missing_percent,
       )
 
   @pytest.mark.parametrize("name", ["", "   "])
@@ -435,6 +501,12 @@ class TestTargetOverrideSettings:
     assert settings.interval_s is None
     assert settings.item_revisit_timeout_s is None
 
+  @pytest.mark.parametrize("invalid_value", [-1.0, 101.0])
+  def test_target_override_validates_min_missing_percent_range(self, invalid_value: float) -> None:
+    """Test that TargetOverrideSettings validates min_missing_percent range."""
+    with pytest.raises(ValidationError):
+      TargetOverrideSettings(min_missing_percent=invalid_value)
+
 
 class TestLoadConfigValidation:
   def test_load_config_validates_arr_target_url(self) -> None:
@@ -455,6 +527,8 @@ class TestLoadConfigValidation:
       ("GTH_ARR_0_OPS_PER_INTERVAL", "0"),
       ("GTH_ARR_0_INTERVAL_S", "-1"),
       ("GTH_ARR_0_ITEM_REVISIT_TIMEOUT_S", "0"),
+      ("GTH_ARR_0_SEARCH_BACKOFF_S", "-1"),
+      ("GTH_ARR_0_MAX_SEARCHES_PER_ITEM_PER_DAY", "-1"),
     ],
   )
   def test_load_config_validates_arr_target_positive_integers(
@@ -468,6 +542,19 @@ class TestLoadConfigValidation:
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
       "GTH_ARR_0_APIKEY": "test-key",
       env_key: env_value,
+    }
+    with pytest.raises(ValidationError):
+      load_config(env)
+
+  def test_load_config_validates_min_missing_percent_range(self) -> None:
+    """Test that load_config validates min_missing_percent range."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "sonarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:8989",
+      "GTH_ARR_0_APIKEY": "test-key",
+      "GTH_ARR_0_MIN_MISSING_PERCENT": "101.0",
     }
     with pytest.raises(ValidationError):
       load_config(env)

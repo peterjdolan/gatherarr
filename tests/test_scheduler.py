@@ -22,7 +22,9 @@ class FakeArrClient:
     self.get_series_called = False
     self.search_movie_called = False
     self.search_series_called = False
-    self.search_movie_id: int | None = None
+    self.search_movie_calls = 0
+    self.search_series_calls = 0
+    self.search_movie_id: Any | None = None
     self.search_series_id: int | None = None
 
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
@@ -40,11 +42,13 @@ class FakeArrClient:
 
   async def search_movie(self, movie_id: Any, logging_ids: dict[str, Any]) -> dict:
     self.search_movie_called = True
+    self.search_movie_calls += 1
     self.search_movie_id = movie_id
     return {"id": 1}
 
   async def search_series(self, series_id: Any, logging_ids: dict[str, Any]) -> dict:
     self.search_series_called = True
+    self.search_series_calls += 1
     self.search_series_id = series_id.series_id if hasattr(series_id, "series_id") else series_id
     return {"id": 1}
 
@@ -81,6 +85,23 @@ class FakeClientWithIneligibleItems(FakeArrClient):
     ]
 
 
+class FakeClientWithSingleEligibleMovie(FakeArrClient):
+  """Fake client that returns one eligible movie."""
+
+  async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
+    self.get_movies_called = True
+    return [{"id": 1, "title": "Movie 1", "monitored": True, "hasFile": False}]
+
+
+class FakeClientWithSearchError(FakeClientWithSingleEligibleMovie):
+  """Fake client that fails on movie search."""
+
+  async def search_movie(self, movie_id: Any, logging_ids: dict[str, Any]) -> dict:
+    self.search_movie_called = True
+    self.search_movie_calls += 1
+    raise RuntimeError("Search error")
+
+
 @pytest.fixture
 def state_manager() -> StateManager:
   """Create a StateManager with in-memory storage."""
@@ -91,6 +112,7 @@ def create_target(
   name: str,
   arr_type: ArrType,
   ops_per_interval: int = 10,
+  **overrides: Any,
 ) -> ArrTarget:
   """Create an ArrTarget with common default values."""
   return ArrTarget(
@@ -101,13 +123,14 @@ def create_target(
     ops_per_interval=ops_per_interval,
     interval_s=60,
     item_revisit_timeout_s=3600,
+    **overrides,
   )
 
 
 def create_scheduler(
   target: ArrTarget,
   state_manager: StateManager,
-  fake_client: FakeArrClient | FakeClientWithError,
+  fake_client: Any,
 ) -> Scheduler:
   """Create a Scheduler with the given target, state manager, and client."""
   from app.arr_client import ArrClient
@@ -219,3 +242,56 @@ class TestScheduler:
 
     assert fake_client.get_series_called
     assert not fake_client.search_series_called
+
+  @pytest.mark.asyncio
+  async def test_run_once_dry_run_does_not_call_search(self, state_manager: StateManager) -> None:
+    target = create_target("test-dry-run", ArrType.RADARR, dry_run=True)
+    fake_client = FakeClientWithSingleEligibleMovie(target)
+    scheduler = create_scheduler(target, state_manager, fake_client)
+
+    await scheduler.run_once(target)
+
+    assert fake_client.get_movies_called
+    assert not fake_client.search_movie_called
+    target_state = state_manager.get_target_state("test-dry-run")
+    assert target_state.items["1"].last_result == "dry_run_search_eligible"
+
+  @pytest.mark.asyncio
+  async def test_run_once_respects_max_searches_per_item_per_day(
+    self, state_manager: StateManager
+  ) -> None:
+    target = create_target(
+      "test-daily-limit",
+      ArrType.RADARR,
+      item_revisit_timeout_s=1,
+      max_searches_per_item_per_day=1,
+    )
+    fake_client = FakeClientWithSingleEligibleMovie(target)
+    scheduler = create_scheduler(target, state_manager, fake_client)
+
+    await scheduler.run_once(target)
+
+    target_state = state_manager.get_target_state("test-daily-limit")
+    target_state.items["1"].last_processed_timestamp = time.time() - 10.0
+
+    await scheduler.run_once(target)
+
+    assert fake_client.search_movie_calls == 1
+
+  @pytest.mark.asyncio
+  async def test_run_once_respects_search_backoff_after_error(
+    self, state_manager: StateManager
+  ) -> None:
+    target = create_target(
+      "test-backoff",
+      ArrType.RADARR,
+      item_revisit_timeout_s=1,
+      search_backoff_s=3600,
+    )
+    fake_client = FakeClientWithSearchError(target)
+    scheduler = create_scheduler(target, state_manager, fake_client)
+
+    await scheduler.run_once(target)
+    await scheduler.run_once(target)
+
+    assert fake_client.search_movie_calls == 1

@@ -3,6 +3,7 @@
 import asyncio
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 import structlog
@@ -23,6 +24,53 @@ from app.metrics import (
 from app.state import ItemState, RunStatus, StateManager, TargetState
 
 logger = structlog.get_logger()
+
+
+def _parse_utc_datetime(value: Any) -> datetime | None:
+  """Parse an ISO date/time string into a timezone-aware UTC datetime."""
+  if not isinstance(value, str):
+    return None
+
+  normalized = value.strip()
+  if not normalized:
+    return None
+
+  iso_input = f"{normalized[:-1]}+00:00" if normalized.endswith("Z") else normalized
+  try:
+    parsed = datetime.fromisoformat(iso_input)
+  except ValueError:
+    return None
+
+  if parsed.tzinfo is None:
+    return parsed.replace(tzinfo=timezone.utc)
+  return parsed.astimezone(timezone.utc)
+
+
+def _normalize_item_tags(item: dict[str, Any]) -> set[str]:
+  """Extract and normalize item tags for include/exclude filtering."""
+  raw_tags = item.get("tags")
+  if not isinstance(raw_tags, list):
+    return set()
+
+  normalized_tags: set[str] = set()
+  for raw_tag in raw_tags:
+    normalized_tag = str(raw_tag).strip()
+    if normalized_tag:
+      normalized_tags.add(normalized_tag)
+  return normalized_tags
+
+
+def _item_matches_tag_filters(
+  item: dict[str, Any], include_tags: list[str], exclude_tags: list[str]
+) -> bool:
+  """Return True if item tags satisfy include/exclude filters."""
+  item_tags = _normalize_item_tags(item)
+
+  if include_tags and not any(tag in item_tags for tag in include_tags):
+    return False
+  if exclude_tags and any(tag in item_tags for tag in exclude_tags):
+    return False
+  return True
 
 
 @dataclass
@@ -163,10 +211,10 @@ class Scheduler:
       handler: ItemHandler
       if target.arr_type == ArrType.RADARR:
         items = await client.get_movies(combined_logging_ids)
-        handler = MovieHandler()
+        handler = MovieHandler(target)
       elif target.arr_type == ArrType.SONARR:
         items = await client.get_series(combined_logging_ids)
-        handler = SeriesHandler()
+        handler = SeriesHandler(target)
       else:
         raise ValueError(f"Unsupported target type: {target.arr_type}")
 
@@ -258,6 +306,62 @@ class Scheduler:
     self.running = False
     logger.debug("Scheduler stopped")
 
+  @staticmethod
+  def _day_start_timestamp(timestamp: float) -> float:
+    """Round a timestamp down to the UTC day boundary."""
+    seconds_per_day = 86400.0
+    return float(int(timestamp // seconds_per_day) * int(seconds_per_day))
+
+  def _is_daily_limit_reached(
+    self,
+    target: ArrTarget,
+    item_state: ItemState | None,
+    current_timestamp: float,
+  ) -> bool:
+    """Return True when max daily searches for an item has been reached."""
+    if item_state is None:
+      return False
+    if target.max_searches_per_item_per_day <= 0:
+      return False
+
+    current_day_start = self._day_start_timestamp(current_timestamp)
+    if item_state.search_day_start_timestamp != current_day_start:
+      return False
+
+    return item_state.search_count_in_day >= target.max_searches_per_item_per_day
+
+  def _build_item_state(
+    self,
+    item_id: str,
+    previous_item_state: ItemState | None,
+    processed_timestamp: float,
+    last_result: str,
+    last_status: str,
+    increment_search_count: bool,
+  ) -> ItemState:
+    """Build the next item state while preserving daily counters."""
+    day_start_timestamp = 0.0
+    search_count_in_day = 0
+    if previous_item_state is not None:
+      day_start_timestamp = previous_item_state.search_day_start_timestamp
+      search_count_in_day = previous_item_state.search_count_in_day
+
+    if increment_search_count:
+      current_day_start = self._day_start_timestamp(processed_timestamp)
+      if day_start_timestamp != current_day_start:
+        day_start_timestamp = current_day_start
+        search_count_in_day = 0
+      search_count_in_day += 1
+
+    return ItemState(
+      item_id=item_id,
+      last_processed_timestamp=processed_timestamp,
+      last_result=last_result,
+      last_status=last_status,
+      search_day_start_timestamp=day_start_timestamp,
+      search_count_in_day=search_count_in_day,
+    )
+
   async def _process_items(
     self,
     target: ArrTarget,
@@ -309,9 +413,10 @@ class Scheduler:
       if item_state is not None:
         item_logging_ids.update(item_state.logging_ids())
 
+      now = time.time()
       if item_state is not None:
-        time_since_last = time.time() - item_state.last_processed_timestamp
-        if time_since_last < target.item_revisit_timeout_s:
+        time_since_last = now - item_state.last_processed_timestamp
+        if item_state.last_status == "success" and time_since_last < target.item_revisit_timeout_s:
           logger.debug(
             "Skipping item (revisit timeout not met)",
             time_since_last=time_since_last,
@@ -320,6 +425,25 @@ class Scheduler:
           )
           skips_total.labels(target=target.name, type=target.arr_type.value).inc()
           continue
+        if item_state.last_status != "success" and target.search_backoff_s > 0:
+          if time_since_last < target.search_backoff_s:
+            logger.debug(
+              "Skipping item (search backoff not met)",
+              time_since_last=time_since_last,
+              search_backoff_s=target.search_backoff_s,
+              **item_logging_ids,
+            )
+            skips_total.labels(target=target.name, type=target.arr_type.value).inc()
+            continue
+
+      if self._is_daily_limit_reached(target, item_state, now):
+        logger.debug(
+          "Skipping item (daily search limit reached)",
+          max_searches_per_item_per_day=target.max_searches_per_item_per_day,
+          **item_logging_ids,
+        )
+        skips_total.labels(target=target.name, type=target.arr_type.value).inc()
+        continue
 
       if not item_handler.should_search(item):
         logger.debug(
@@ -327,6 +451,29 @@ class Scheduler:
           **item_logging_ids,
         )
         skips_total.labels(target=target.name, type=target.arr_type.value).inc()
+        continue
+
+      if target.dry_run:
+        dry_run_timestamp = time.time()
+        dry_run_state = self._build_item_state(
+          item_id=item_id_str,
+          previous_item_state=item_state,
+          processed_timestamp=dry_run_timestamp,
+          last_result="dry_run_search_eligible",
+          last_status="success",
+          increment_search_count=True,
+        )
+        target_state.items[item_id_str] = dry_run_state
+        item_logging_ids.update(dry_run_state.logging_ids())
+
+        processed += 1
+        ops_count += 1
+        logger.debug(
+          "Item processed in dry run mode",
+          processed=processed,
+          ops_count=ops_count,
+          **item_logging_ids,
+        )
         continue
 
       try:
@@ -343,11 +490,13 @@ class Scheduler:
           request_duration
         )
 
-        item_state = ItemState(
+        item_state = self._build_item_state(
           item_id=item_id_str,
-          last_processed_timestamp=request_end,
+          previous_item_state=item_state,
+          processed_timestamp=request_end,
           last_result="search_triggered",
           last_status="success",
+          increment_search_count=True,
         )
         target_state.items[item_id_str] = item_state
         item_logging_ids.update(item_state.logging_ids())
@@ -362,6 +511,18 @@ class Scheduler:
           **item_logging_ids,
         )
       except Exception as e:
+        error_timestamp = time.time()
+        failed_state = self._build_item_state(
+          item_id=item_id_str,
+          previous_item_state=item_state,
+          processed_timestamp=error_timestamp,
+          last_result="search_failed",
+          last_status="error",
+          increment_search_count=True,
+        )
+        target_state.items[item_id_str] = failed_state
+        item_logging_ids.update(failed_state.logging_ids())
+
         logger.exception(
           "Exception while processing item",
           exception=e,
@@ -381,10 +542,20 @@ class Scheduler:
 class MovieHandler:
   """Handler for processing movies."""
 
+  def __init__(self, target: ArrTarget) -> None:
+    self.target = target
+
   def should_search(self, item: dict[str, Any]) -> bool:
-    """Return True when movie is monitored and quality cutoff is unmet."""
-    monitored = item.get("monitored")
-    return monitored is True and self._is_cutoff_unmet(item)
+    """Return True when movie satisfies configured eligibility rules."""
+    if self.target.require_monitored and item.get("monitored") is not True:
+      return False
+    if self.target.require_cutoff_unmet and not self._is_cutoff_unmet(item):
+      return False
+    if not _item_matches_tag_filters(item, self.target.include_tags, self.target.exclude_tags):
+      return False
+    if self.target.released_only and not self._is_released(item):
+      return False
+    return True
 
   def _is_cutoff_unmet(self, item: dict[str, Any]) -> bool:
     """Determine whether Radarr quality cutoff has not been reached."""
@@ -398,6 +569,19 @@ class MovieHandler:
     if isinstance(has_file, bool):
       return not has_file
 
+    return False
+
+  def _is_released(self, item: dict[str, Any]) -> bool:
+    """Determine whether a movie has reached release availability."""
+    if item.get("hasFile") is True:
+      return True
+
+    now = datetime.now(timezone.utc)
+    release_keys = ("digitalRelease", "physicalRelease", "inCinemas")
+    for key in release_keys:
+      release_dt = _parse_utc_datetime(item.get(key))
+      if release_dt is not None and release_dt <= now:
+        return True
     return False
 
   def extract_item_id(self, item: dict[str, Any]) -> MovieId | None:
@@ -455,10 +639,22 @@ class SeriesHandler:
   searches, but not season-specific or episode-specific searches.
   """
 
+  def __init__(self, target: ArrTarget) -> None:
+    self.target = target
+
   def should_search(self, item: dict[str, Any]) -> bool:
-    """Return True when series is monitored and quality cutoff is unmet."""
-    monitored = item.get("monitored")
-    return monitored is True and self._is_cutoff_unmet(item)
+    """Return True when series satisfies configured eligibility rules."""
+    if self.target.require_monitored and item.get("monitored") is not True:
+      return False
+    if self.target.require_cutoff_unmet and not self._is_cutoff_unmet(item):
+      return False
+    if not _item_matches_tag_filters(item, self.target.include_tags, self.target.exclude_tags):
+      return False
+    if self.target.released_only and not self._is_released(item):
+      return False
+    if not self._meets_missing_thresholds(item):
+      return False
+    return True
 
   def _is_cutoff_unmet(self, item: dict[str, Any]) -> bool:
     """Determine whether Sonarr quality cutoff has not been reached."""
@@ -487,6 +683,79 @@ class SeriesHandler:
       return percent_of_episodes < 100
 
     return False
+
+  def _is_released(self, item: dict[str, Any]) -> bool:
+    """Determine whether a series has released episodes."""
+    now = datetime.now(timezone.utc)
+    first_aired = _parse_utc_datetime(item.get("firstAired"))
+    if first_aired is not None and first_aired <= now:
+      return True
+
+    statistics = item.get("statistics")
+    if not isinstance(statistics, dict):
+      return False
+    episode_file_count = statistics.get("episodeFileCount")
+    if isinstance(episode_file_count, int) and not isinstance(episode_file_count, bool):
+      return episode_file_count > 0
+    return False
+
+  def _meets_missing_thresholds(self, item: dict[str, Any]) -> bool:
+    """Validate configured series missing-episode thresholds."""
+    if self.target.min_missing_episodes <= 0 and self.target.min_missing_percent <= 0:
+      return True
+
+    statistics = item.get("statistics")
+    if not isinstance(statistics, dict):
+      return False
+
+    missing_episode_count = self._missing_episode_count(statistics)
+    if self.target.min_missing_episodes > 0:
+      if missing_episode_count is None:
+        return False
+      if missing_episode_count < self.target.min_missing_episodes:
+        return False
+
+    missing_percent = self._missing_percent(statistics, missing_episode_count)
+    if self.target.min_missing_percent > 0:
+      if missing_percent is None:
+        return False
+      if missing_percent < self.target.min_missing_percent:
+        return False
+
+    return True
+
+  def _missing_episode_count(self, statistics: dict[str, Any]) -> int | None:
+    """Calculate missing episodes from statistics counters."""
+    episode_file_count = statistics.get("episodeFileCount")
+    total_episode_count = statistics.get("totalEpisodeCount")
+    if (
+      isinstance(episode_file_count, int)
+      and not isinstance(episode_file_count, bool)
+      and isinstance(total_episode_count, int)
+      and not isinstance(total_episode_count, bool)
+    ):
+      return max(total_episode_count - episode_file_count, 0)
+    return None
+
+  def _missing_percent(
+    self, statistics: dict[str, Any], missing_episode_count: int | None
+  ) -> float | None:
+    """Calculate missing percent from statistics counters."""
+    percent_of_episodes = statistics.get("percentOfEpisodes")
+    if isinstance(percent_of_episodes, float):
+      return max(100.0 - percent_of_episodes, 0.0)
+    if isinstance(percent_of_episodes, int) and not isinstance(percent_of_episodes, bool):
+      return max(100.0 - float(percent_of_episodes), 0.0)
+
+    total_episode_count = statistics.get("totalEpisodeCount")
+    if (
+      missing_episode_count is not None
+      and isinstance(total_episode_count, int)
+      and not isinstance(total_episode_count, bool)
+      and total_episode_count > 0
+    ):
+      return (missing_episode_count / total_episode_count) * 100.0
+    return None
 
   def extract_item_id(self, item: dict[str, Any]) -> SeriesId | None:
     """Extract item ID for state tracking."""

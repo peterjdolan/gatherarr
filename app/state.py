@@ -29,6 +29,8 @@ class ItemState:
   last_processed_timestamp: float
   last_result: str
   last_status: str
+  search_day_start_timestamp: float = 0.0
+  search_count_in_day: int = 0
 
   def logging_ids(self) -> dict[str, str]:
     """Logging identifiers for the item."""
@@ -37,6 +39,8 @@ class ItemState:
       "item_last_processed_timestamp": str(self.last_processed_timestamp),
       "item_last_result": self.last_result,
       "item_last_status": self.last_status,
+      "item_search_day_start_timestamp": str(self.search_day_start_timestamp),
+      "item_search_count_in_day": str(self.search_count_in_day),
     }
 
 
@@ -266,6 +270,8 @@ class StateManager:
           last_processed_timestamp=item_data["last_processed_timestamp"],
           last_result=item_data["last_result"],
           last_status=item_data["last_status"],
+          search_day_start_timestamp=item_data.get("search_day_start_timestamp", 0.0),
+          search_count_in_day=item_data.get("search_count_in_day", 0),
         )
 
       state.targets[target_name] = target_state
