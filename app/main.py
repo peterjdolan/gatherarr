@@ -14,6 +14,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from app.arr_client import ArrClient
 from app.config import load_config
 from app.http_client import HttpxClient
+from app.log_redaction import redact_sensitive_fields
 from app.scheduler import Scheduler
 from app.state import FileStateStorage, InMemoryStateStorage, StateManager, StateStorage
 
@@ -32,6 +33,7 @@ def setup_logging(log_level: str) -> None:
     processors=[
       structlog.processors.TimeStamper(fmt="iso"),
       structlog.processors.add_log_level,
+      redact_sensitive_fields,
       structlog.processors.JSONRenderer(),
     ],
     wrapper_class=structlog.make_filtering_bound_logger(numeric_level),
