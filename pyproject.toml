@@ -36,7 +36,7 @@ lint = "ruff check --fix ."
 lint-check = "ruff check ."
 type-check = "mypy ."
 test = "pytest tests --ignore=tests/integration"
-test-e2e = "python -m pytest tests/integration"
+test-e2e = "pytest tests/integration"
 
 [tool.ruff]
 target-version = "py313"
