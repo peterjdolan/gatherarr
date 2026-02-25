@@ -248,8 +248,8 @@ class Config(BaseSettings):
   released_only: bool = False
   search_backoff_s: int = Field(default=0, ge=0)
   dry_run: bool = False
-  include_tags: set[str] = Field(default_factory=set)
-  exclude_tags: set[str] = Field(default_factory=set)
+  include_tags: str = ""
+  exclude_tags: str = ""
   min_missing_episodes: int = Field(default=0, ge=0)
   min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
@@ -269,12 +269,6 @@ class Config(BaseSettings):
       return str(result)
     result = logging.getLevelName(logging.INFO)
     return str(result)
-
-  @field_validator("include_tags", "exclude_tags", mode="before")
-  @classmethod
-  def normalize_global_tags(cls, v: object) -> set[str]:
-    """Normalize global include/exclude tags."""
-    return coerce_tag_set(v)
 
   @field_validator("metrics_address")
   @classmethod
