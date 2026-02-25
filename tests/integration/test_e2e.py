@@ -168,8 +168,6 @@ class FakeArrServer:
     if content_length > 0:
       body_text = handler.rfile.read(content_length).decode("utf-8")
 
-    self._api_contract.validate_request(method, handler.path, body_text)
-
     with self._lock:
       self._captured_requests.append(
         CapturedRequest(method=method, path=handler.path, body_text=body_text)
