@@ -16,14 +16,13 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "jsonschema>=4.26.0",
   "mypy>=1.7.0",
+  "openapi-core>=0.22.0",
   "poethepoet>=0.24.0",
   "pytest>=7.4.0",
   "pytest-asyncio>=0.23.0",
   "pytest-timeout>=2.2.0",
   "ruff>=0.1.0",
-  "types-jsonschema>=4.26.0.20260202",
   "types-pyyaml>=6.0.12",
 ]
 

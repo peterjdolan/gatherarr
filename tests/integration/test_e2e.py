@@ -11,9 +11,11 @@ from typing import Any, Iterator
 
 import httpx
 import pytest
-from jsonschema import Draft7Validator, FormatChecker, ValidationError
-from referencing import Registry
-from referencing.jsonschema import DRAFT7
+import requests
+from openapi_core import OpenAPI
+from openapi_core.contrib.requests.requests import RequestsOpenAPIRequest
+from openapi_core.contrib.requests.responses import RequestsOpenAPIResponse
+from openapi_core.exceptions import OpenAPIError
 
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
@@ -27,188 +29,62 @@ RouteKey = tuple[str, str]
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RADARR_SPEC_PATH = REPO_ROOT / "context" / "radarr_api.json"
 SONARR_SPEC_PATH = REPO_ROOT / "context" / "sonarr_api.json"
+OPENAPI_BASE_URL = "http://localhost:7878"
+OPENAPI_API_KEY = "integration-key"
+OPENAPI_CONTENT_TYPE = "application/json"
 
 
-def load_openapi_document(spec_path: Path) -> dict[str, Any]:
-  """Load an OpenAPI document."""
-  with spec_path.open("r", encoding="utf-8") as spec_file:
-    spec_document = json.load(spec_file)
-  if not isinstance(spec_document, dict):
-    raise AssertionError(f"OpenAPI document at {spec_path} must be a JSON object")
-  return spec_document
+def build_openapi_request(method: str, path: str, body_text: str) -> RequestsOpenAPIRequest:
+  """Build an openapi-core request adapter."""
+  prepared_request = requests.Request(
+    method=method,
+    url=f"{OPENAPI_BASE_URL}{path}",
+    headers={
+      "X-Api-Key": OPENAPI_API_KEY,
+      "Content-Type": OPENAPI_CONTENT_TYPE,
+    },
+    data=body_text,
+  ).prepare()
+  return RequestsOpenAPIRequest(prepared_request)
 
 
-def normalize_openapi_schema(schema_fragment: Any) -> Any:
-  """Normalize OpenAPI schema fragments into JSON Schema-compatible fragments."""
-  if isinstance(schema_fragment, list):
-    return [normalize_openapi_schema(item) for item in schema_fragment]
-
-  if not isinstance(schema_fragment, dict):
-    return schema_fragment
-
-  normalized_fragment = {
-    key: normalize_openapi_schema(value) for key, value in schema_fragment.items()
-  }
-
-  if normalized_fragment.get("nullable") is True:
-    current_type = normalized_fragment.get("type")
-    if isinstance(current_type, str):
-      normalized_fragment["type"] = [current_type, "null"]
-    elif isinstance(current_type, list) and "null" not in current_type:
-      normalized_fragment["type"] = [*current_type, "null"]
-    normalized_fragment.pop("nullable")
-
-  normalized_fragment.pop("readOnly", None)
-  normalized_fragment.pop("writeOnly", None)
-  normalized_fragment.pop("example", None)
-  normalized_fragment.pop("examples", None)
-  normalized_fragment.pop("deprecated", None)
-  return normalized_fragment
-
-
-def first_content_schema(operation_section: dict[str, Any]) -> dict[str, Any]:
-  """Select the schema from an OpenAPI content section."""
-  if "application/json" in operation_section:
-    media_type = operation_section["application/json"]
-  elif "text/json" in operation_section:
-    media_type = operation_section["text/json"]
-  elif "text/plain" in operation_section:
-    media_type = operation_section["text/plain"]
-  else:
-    available_types = ", ".join(sorted(operation_section.keys()))
-    raise AssertionError(f"No supported media type found. Available: {available_types}")
-
-  schema = media_type.get("schema")
-  if not isinstance(schema, dict):
-    raise AssertionError("Expected media type schema to be an object")
-  return schema
-
-
-def preferred_media_type(content_section: dict[str, Any]) -> str:
-  """Select preferred media type for schema lookup."""
-  if "application/json" in content_section:
-    return "application/json"
-  if "text/json" in content_section:
-    return "text/json"
-  if "text/plain" in content_section:
-    return "text/plain"
-  available_types = ", ".join(sorted(content_section.keys()))
-  raise AssertionError(f"No supported media type found. Available: {available_types}")
-
-
-def pointer_token(value: str) -> str:
-  """Escape a value for JSON pointer tokens."""
-  return value.replace("~", "~0").replace("/", "~1")
-
-
-def format_validation_error(error: ValidationError) -> str:
-  """Format jsonschema validation errors for assertions."""
-  path_tokens = [str(token) for token in error.absolute_path]
-  path = ".".join(path_tokens) if path_tokens else "<root>"
-  return f"{error.message} at {path}"
+def build_openapi_response(status_code: int, body: Any) -> RequestsOpenAPIResponse:
+  """Build an openapi-core response adapter."""
+  response = requests.Response()
+  response.status_code = status_code
+  response.headers = {"Content-Type": OPENAPI_CONTENT_TYPE}
+  response._content = json.dumps(body).encode("utf-8")
+  return RequestsOpenAPIResponse(response)
 
 
 class OpenApiContract:
-  """OpenAPI contract helper for fake server validation."""
+  """OpenAPI contract helper using openapi-core validators."""
 
   def __init__(self, service_name: str, spec_path: Path) -> None:
     self.service_name = service_name
     self.spec_path = spec_path
-    self.spec_uri = f"urn:openapi:{service_name}"
-    self.document = normalize_openapi_schema(load_openapi_document(spec_path))
-    self.registry = Registry().with_resource(self.spec_uri, DRAFT7.create_resource(self.document))
-
-  def operation(self, method: str, path: str) -> dict[str, Any]:
-    """Get an operation definition for a method/path pair."""
-    paths = self.document.get("paths")
-    if not isinstance(paths, dict):
-      raise AssertionError(f"{self.service_name} spec missing paths object")
-    if path not in paths:
-      raise AssertionError(f"{self.service_name} spec missing path: {path}")
-
-    path_item = paths[path]
-    if not isinstance(path_item, dict):
-      raise AssertionError(f"{self.service_name} path item must be an object: {path}")
-    method_lower = method.lower()
-    if method_lower not in path_item:
-      raise AssertionError(f"{self.service_name} spec missing method {method} for path {path}")
-
-    operation = path_item[method_lower]
-    if not isinstance(operation, dict):
-      raise AssertionError(f"{self.service_name} operation must be an object for {method} {path}")
-    return operation
+    self.openapi = OpenAPI.from_file_path(spec_path)
 
   def validate_response(self, method: str, path: str, status_code: int, body: Any) -> None:
-    """Validate a response body against the operation's OpenAPI response schema."""
-    operation = self.operation(method, path)
-    responses = operation.get("responses")
-    if not isinstance(responses, dict):
+    """Validate a response body against the operation schema."""
+    request = build_openapi_request(method, path, "")
+    response = build_openapi_response(status_code, body)
+    try:
+      self.openapi.validate_response(request, response)
+    except OpenAPIError as error:
       raise AssertionError(
-        f"{self.service_name} operation has no responses object for {method} {path}"
-      )
+        f"{self.service_name} response contract mismatch for {method} {path} {status_code}: {error}"
+      ) from error
 
-    response_key = str(status_code)
-    if response_key not in responses:
+  def validate_request(self, method: str, path: str, body_text: str) -> None:
+    """Validate a request body against the operation schema."""
+    request = build_openapi_request(method, path, body_text)
+    try:
+      self.openapi.validate_request(request)
+    except OpenAPIError as error:
       raise AssertionError(
-        f"{self.service_name} spec missing response {status_code} for {method} {path}"
-      )
-    response_definition = responses[response_key]
-    if not isinstance(response_definition, dict):
-      raise AssertionError(
-        f"{self.service_name} response definition must be object for {method} {path}"
-      )
-
-    content = response_definition.get("content")
-    if not isinstance(content, dict):
-      raise AssertionError(
-        f"{self.service_name} response {status_code} for {method} {path} has no content"
-      )
-    media_type = preferred_media_type(content)
-    schema_pointer = (
-      f"/paths/{pointer_token(path)}/{method.lower()}/responses/{status_code}/content/"
-      f"{pointer_token(media_type)}/schema"
-    )
-    schema = {"$ref": f"{self.spec_uri}#{schema_pointer}"}
-    validator = Draft7Validator(
-      schema=schema,
-      registry=self.registry,
-      format_checker=FormatChecker(),
-    )
-    errors = sorted(validator.iter_errors(body), key=lambda error: list(error.absolute_path))
-    if errors:
-      formatted_error = format_validation_error(errors[0])
-      raise AssertionError(
-        f"{self.service_name} response contract mismatch for {method} {path} {status_code}: "
-        f"{formatted_error}"
-      )
-
-  def validate_request(self, method: str, path: str, body: Any) -> None:
-    """Validate a request body against the operation's OpenAPI request schema."""
-    operation = self.operation(method, path)
-    request_body = operation.get("requestBody")
-    if not isinstance(request_body, dict):
-      raise AssertionError(f"{self.service_name} operation has no requestBody for {method} {path}")
-
-    content = request_body.get("content")
-    if not isinstance(content, dict):
-      raise AssertionError(f"{self.service_name} requestBody has no content for {method} {path}")
-    media_type = preferred_media_type(content)
-    schema_pointer = (
-      f"/paths/{pointer_token(path)}/{method.lower()}/requestBody/content/"
-      f"{pointer_token(media_type)}/schema"
-    )
-    schema = {"$ref": f"{self.spec_uri}#{schema_pointer}"}
-    validator = Draft7Validator(
-      schema=schema,
-      registry=self.registry,
-      format_checker=FormatChecker(),
-    )
-    errors = sorted(validator.iter_errors(body), key=lambda error: list(error.absolute_path))
-    if errors:
-      formatted_error = format_validation_error(errors[0])
-      raise AssertionError(
-        f"{self.service_name} request contract mismatch for {method} {path}: {formatted_error}"
-      )
+        f"{self.service_name} request contract mismatch for {method} {path}: {error}"
+      ) from error
 
 
 def radarr_contract() -> OpenApiContract:
@@ -259,7 +135,7 @@ class FakeArrServer:
   def _validate_configured_contract(self) -> None:
     """Validate fake server response fixtures against OpenAPI contracts."""
     for (method, path), configured_responses in self._responses.items():
-      self._api_contract.operation(method, path)
+      self._api_contract.validate_request(method, path, "")
       for response in configured_responses:
         if response.enforce_contract:
           self._api_contract.validate_response(
@@ -291,6 +167,8 @@ class FakeArrServer:
     body_text = ""
     if content_length > 0:
       body_text = handler.rfile.read(content_length).decode("utf-8")
+
+    self._api_contract.validate_request(method, handler.path, body_text)
 
     with self._lock:
       self._captured_requests.append(
