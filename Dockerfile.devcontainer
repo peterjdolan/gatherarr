@@ -1,7 +1,0 @@
-FROM mcr.microsoft.com/devcontainers/python:1-3.14-bookworm
-
-# Install uv from multi-stage build
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-RUN chmod +x /usr/local/bin/uv
-
-WORKDIR /workspace

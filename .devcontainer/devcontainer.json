@@ -1,8 +1,8 @@
 {
   "name": "Gatherarr",
-  "build": {
-    "dockerfile": "../Dockerfile.devcontainer",
-    "context": ".."
+  "image": "mcr.microsoft.com/devcontainers/python:3.14",
+  "features": {
+    "ghcr.io/devcontainers-contrib/features/uv:1": {}
   },
   "forwardPorts": [9090],
   "portsAttributes": {
@@ -79,7 +79,7 @@
           "**/.mypy_cache/**": true,
           "**/.ruff_cache/**": true
         },
-        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.env.linux": {
           "PYTHONPATH": "${workspaceFolder}"
         }
