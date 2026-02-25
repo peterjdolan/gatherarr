@@ -10,9 +10,13 @@ Huntarrs are great, but when you need a calm, reliable, and simple helper, you l
 
 ## Minimal Deployment
 
+1. Clone the repository:
+
 ```bash
 git clone https://github.com/peterjdolan/gatherarr.git
 ```
+
+2. Create `docker-compose.yaml` in the parent directory and adjust hostnames/API keys for your environment:
 
 ```yaml
 services:
@@ -25,7 +29,13 @@ services:
       GTH_ARR_0_NAME: Radarr
       GTH_ARR_0_BASEURL: http://radarr:7878
       GTH_ARR_0_APIKEY: 059b34da8966442aab57fd2e3debfa9b
+      GTH_ARR_1_TYPE: sonarr
+      GTH_ARR_1_NAME: Sonarr
+      GTH_ARR_1_BASEURL: http://sonarr:8989
+      GTH_ARR_1_APIKEY: 71bc23f90cb44eb3a22d5d8b01f99e5b
 ```
+
+3. Start Gatherarr:
 
 ```bash
 docker compose up --build gatherarr
@@ -59,7 +69,6 @@ Configuration is done by environment variables only. Docker Compose users are we
 
 ### Global configuration
 
-- `GTH_LOG_LEVEL`: (Optional) log verbosity, `debug|info|warn|error`, default `info`.
 - `GTH_METRICS_ENABLED`: (Optional) Whether or not to host the metrics endpoint (true/false).
 - `GTH_METRICS_ADDRESS`: (Optional) Metrics endpoint listen address (default `0.0.0.0`).
 - `GTH_METRICS_PORT`: (Optional) Metrics endpoint port (default 9090).
