@@ -106,7 +106,10 @@ class FakeArrServer:
   @property
   def base_url(self) -> str:
     """Base URL for this fake server."""
-    host, port = self._server.server_address
+    server_address = self._server.server_address
+    raw_host = server_address[0]
+    port = server_address[1]
+    host = raw_host.decode("utf-8") if isinstance(raw_host, bytes) else raw_host
     return f"http://{host}:{port}"
 
   def start(self) -> None:
