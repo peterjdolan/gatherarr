@@ -9,7 +9,7 @@ import structlog
 
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
-from app.logging import Action, log_movie_action, log_series_action
+from app.logging import Action, log_movie_action, log_season_action
 from app.metrics import (
   grabs_total,
   last_success_timestamp_seconds,
@@ -58,20 +58,22 @@ class MovieId(ItemId):
 
 
 @dataclass
-class SeriesId(ItemId):
-  """Item identifier for series."""
+class SeasonId(ItemId):
+  """Item identifier for individual seasons."""
 
   series_id: int
+  season_number: int
   series_name: str | None
 
   def format_for_state(self) -> str:
-    """Format series ID and name for state lookup."""
-    return str(self.series_id)
+    """Format season identity for state lookup."""
+    return f"{self.series_id}:{self.season_number}"
 
   def logging_ids(self) -> dict[str, Any]:
-    """Get logging identifiers for the series."""
+    """Get logging identifiers for the season."""
     return {
       "series_id": str(self.series_id),
+      "season_number": str(self.season_number),
       "series_name": self.series_name if self.series_name is not None else "None",
     }
 
@@ -80,7 +82,7 @@ class ItemHandler(Protocol):
   """Protocol for handling individual items.
 
   The ItemHandler abstracts away item-type-specific details (such as movie_id, series_id,
-  season_id) from the scheduler. The scheduler works with generic items and delegates
+  season_number) from the scheduler. The scheduler works with generic items and delegates
   all item-type-specific operations (ID extraction, logging, searching) to the handler.
 
   This separation ensures the scheduler never needs to know about item-type-specific
@@ -120,7 +122,7 @@ class Scheduler:
 
   The scheduler operates at a high level, working with generic items and delegating
   all item-type-specific operations to ItemHandler implementations. It never needs
-  to know about item-type-specific concepts like movie_id, series_id, or season_id.
+  to know about item-type-specific concepts like movie_id, series_id, or season_number.
 
   All item identification, logging format, and search operations are abstracted
   through the ItemHandler protocol, ensuring a clean separation of concerns.
@@ -161,8 +163,8 @@ class Scheduler:
         items = await client.get_movies(combined_logging_ids)
         handler = MovieHandler()
       elif target.arr_type == ArrType.SONARR:
-        items = await client.get_series(combined_logging_ids)
-        handler = SeriesHandler()
+        items = await client.get_seasons(combined_logging_ids)
+        handler = SeasonHandler()
       else:
         raise ValueError(f"Unsupported target type: {target.arr_type}")
 
@@ -416,22 +418,18 @@ class MovieHandler:
     )
 
 
-class SeriesHandler:
-  """Handler for processing series.
+class SeasonHandler:
+  """Handler for processing individual seasons."""
 
-  This handler is responsible for extracting the item ID and logging identifiers for series.
-  It also triggers the search for the series and logs the action. It is used to handle series-wide
-  searches, but not season-specific or episode-specific searches.
-  """
-
-  def extract_item_id(self, item: dict[str, Any]) -> SeriesId | None:
-    """Extract item ID for state tracking."""
-    series_id = item.get("id")
-    if series_id is None:
+  def extract_item_id(self, item: dict[str, Any]) -> SeasonId | None:
+    """Extract season ID for state tracking."""
+    series_id = item.get("seriesId")
+    season_number = item.get("seasonNumber")
+    if series_id is None or season_number is None:
       return None
 
-    series_name = item.get("title")
-    return SeriesId(series_id=series_id, series_name=series_name)
+    series_name = item.get("seriesTitle")
+    return SeasonId(series_id=series_id, season_number=season_number, series_name=series_name)
 
   def extract_logging_id(self, item: dict[str, Any]) -> dict[str, str]:
     """Extract logging identifiers."""
@@ -439,11 +437,10 @@ class SeriesHandler:
     if item_id is None:
       return {}
 
-    series_name = item.get("title")
-
     return {
       "series_id": str(item_id.series_id),
-      "series_name": series_name if series_name is not None else "None",
+      "season_number": str(item_id.season_number),
+      "series_name": item_id.series_name if item_id.series_name is not None else "None",
     }
 
   async def search(
@@ -452,19 +449,19 @@ class SeriesHandler:
     item: dict[str, Any],
     logging_ids: dict[str, Any],
   ) -> None:
-    """Trigger search for a series and log the action."""
+    """Trigger search for a season and log the action."""
 
-    series_id = self.extract_item_id(item)
-    if series_id is None:
-      raise ValueError("Series ID is required")
+    season_id = self.extract_item_id(item)
+    if season_id is None:
+      raise ValueError("Season ID is required")
 
     item_logging_ids = self.extract_logging_id(item)
     combined_logging_ids = {**logging_ids, **item_logging_ids}
-    await client.search_series(series_id, logging_ids=combined_logging_ids)
+    await client.search_season(season_id, logging_ids=combined_logging_ids)
 
-    log_series_action(
+    log_season_action(
       logger=logger,
-      action=Action.SEARCH_SERIES,
-      series_id=series_id,
+      action=Action.SEARCH_SEASON,
+      season_id=season_id,
       **logging_ids,
     )

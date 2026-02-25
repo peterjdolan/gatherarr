@@ -19,6 +19,7 @@ class FakeHttpClient(HttpClient):
     self.responses = responses or {}
     self.errors = errors or {}
     self.calls: list[tuple[str, str]] = []
+    self.post_payloads: list[dict[str, Any] | None] = []
 
   async def get(self, url: str, headers: dict[str, str], timeout: float) -> Any:
     """Fake GET request."""
@@ -32,6 +33,7 @@ class FakeHttpClient(HttpClient):
   ) -> Any:
     """Fake POST request."""
     self.calls.append(("POST", url))
+    self.post_payloads.append(payload)
     if url in self.errors:
       raise self.errors[url]
     return self.responses.get(url, {})
@@ -83,15 +85,25 @@ class TestArrClient:
     with pytest.raises(ValueError, match="get_movies.*only supported for radarr"):
       asyncio.run(client.get_movies({}))
 
-  def test_get_series_sonarr(self) -> None:
+  def test_get_seasons_sonarr(self) -> None:
     fake_client = FakeHttpClient(
-      responses={"http://test/api/v3/series": [{"id": 1, "title": "Test"}]}
+      responses={
+        "http://test/api/v3/series": [
+          {"id": 1, "title": "Test", "seasons": [{"seasonNumber": 1}, {"seasonNumber": 2}]},
+          {"id": 2, "title": "Other", "seasons": [{"seasonNumber": 0}]},
+        ]
+      }
     )
     target = sonarr_target()
     client = ArrClient(target, fake_client)
 
-    result = asyncio.run(client.get_series({}))
-    assert result == [{"id": 1, "title": "Test"}]
+    result = asyncio.run(client.get_seasons({}))
+    assert result == [
+      {"seriesId": 1, "seriesTitle": "Test", "seasonNumber": 1},
+      {"seriesId": 1, "seriesTitle": "Test", "seasonNumber": 2},
+      {"seriesId": 2, "seriesTitle": "Other", "seasonNumber": 0},
+    ]
+    assert ("GET", "http://test/api/v3/series") in fake_client.calls
 
   def test_search_movie(self) -> None:
     from app.scheduler import MovieId
@@ -105,16 +117,21 @@ class TestArrClient:
     assert result == {"id": 1}
     assert ("POST", "http://test/api/v3/command") in fake_client.calls
 
-  def test_search_series(self) -> None:
-    from app.scheduler import SeriesId
+  def test_search_season(self) -> None:
+    from app.scheduler import SeasonId
 
     fake_client = FakeHttpClient(responses={"http://test/api/v3/command": {"id": 1}})
     target = sonarr_target()
     client = ArrClient(target, fake_client)
 
-    series_id = SeriesId(series_id=456, series_name="Test Series")
-    result = asyncio.run(client.search_series(series_id, {}))
+    season_id = SeasonId(series_id=456, season_number=3, series_name="Test Series")
+    result = asyncio.run(client.search_season(season_id, {}))
     assert result == {"id": 1}
+    assert fake_client.post_payloads[0] == {
+      "name": "SeasonSearch",
+      "seriesId": 456,
+      "seasonNumber": 3,
+    }
 
   def test_base_url_stripping(self) -> None:
     fake_client = FakeHttpClient()

@@ -6,16 +6,16 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 if TYPE_CHECKING:
-  from app.scheduler import ItemId, MovieId, SeriesId
+  from app.scheduler import ItemId, MovieId, SeasonId
 
 
 class Action(StrEnum):
   """Actions that can be logged."""
 
   GET_MOVIES = "get_movies"
-  GET_SERIES = "get_series"
+  GET_SEASONS = "get_seasons"
   SEARCH_MOVIE = "search_movie"
-  SEARCH_SERIES = "search_series"
+  SEARCH_SEASON = "search_season"
 
 
 def log_item_action(
@@ -29,7 +29,7 @@ def log_item_action(
   Args:
     logger: The structlog logger instance to use
     action: Action description/message
-    **kwargs: Additional fields to include in the log entry (e.g., run_id, target_name, arr_type, movie_id, series_id, season_id)
+    **kwargs: Additional fields to include in the log entry (e.g., run_id, target_name, arr_type, movie_id, series_id, season_number)
   """
   logger.info(
     f"Action: {action.value}",
@@ -61,23 +61,23 @@ def log_movie_action(
   )
 
 
-def log_series_action(
+def log_season_action(
   logger: structlog.BoundLogger,
   action: Action,
-  series_id: "SeriesId",
+  season_id: "SeasonId",
   **kwargs: Any,
 ) -> None:
-  """Log a series-related action with required series_id correlation field at INFO level.
+  """Log a season-related action with required season correlation fields at INFO level.
 
   Args:
     logger: The structlog logger instance to use
     action: Action description/message
-    series_id: Series identifier
+    season_id: Season identifier (series + season number)
     **kwargs: Additional fields to include in the log entry
   """
   log_item_action(
     logger=logger,
     action=action,
-    item_id=series_id,
+    item_id=season_id,
     **kwargs,
   )
