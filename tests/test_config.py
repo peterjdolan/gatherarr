@@ -170,6 +170,7 @@ class TestLoadConfig:
   def test_load_config_rejects_unrecognized_top_level_gth_var(self) -> None:
     env = {
       "GTH_FOO": "bar",
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
@@ -180,6 +181,7 @@ class TestLoadConfig:
 
   def test_load_config_rejects_unrecognized_arr_field(self) -> None:
     env = {
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
@@ -195,6 +197,7 @@ class TestLoadConfig:
     env = {
       "GTH_UNKNOWN": "x",
       "GTH_ARR_0_TYPO": "radarr",
+      "GTH_STATE_FILE_PATH": "",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",

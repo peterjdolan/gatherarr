@@ -168,41 +168,9 @@ class Config(BaseSettings):
     return str(path)
 
 
-_VALID_GTH_TOP_LEVEL_KEYS = frozenset(
-  {
-    "GTH_LOG_LEVEL",
-    "GTH_METRICS_ENABLED",
-    "GTH_METRICS_ADDRESS",
-    "GTH_METRICS_PORT",
-    "GTH_STATE_FILE_PATH",
-    "GTH_OPS_PER_INTERVAL",
-    "GTH_INTERVAL_S",
-    "GTH_ITEM_REVISIT_S",
-  }
-)
-
-_VALID_GTH_ARR_FIELD_PATTERN = re.compile(
-  r"^GTH_ARR_\d+_(TYPE|NAME|BASEURL|APIKEY|OPS_PER_INTERVAL|INTERVAL_S|ITEM_REVISIT_TIMEOUT_S)$"
-)
-
-
-def _is_valid_gth_key(key: str) -> bool:
-  """Return True if key is a recognized GTH_* environment variable."""
-  key_upper = key.upper()
-  if key_upper in _VALID_GTH_TOP_LEVEL_KEYS:
-    return True
-  return _VALID_GTH_ARR_FIELD_PATTERN.match(key_upper) is not None
-
-
-def _validate_no_unrecognized_gth_vars(env_dict: dict[str, str]) -> None:
-  """Raise ValueError if any GTH_* environment variables are unrecognized."""
-  gth_keys = [k for k in env_dict if k.upper().startswith("GTH_")]
-  unrecognized = [k for k in gth_keys if not _is_valid_gth_key(k)]
-  if unrecognized:
-    raise ValueError(
-      f"Unrecognized GTH_* environment variables: {', '.join(sorted(unrecognized))}. "
-      "Check configuration for typos or consult the documentation."
-    )
+def _config_env_keys() -> frozenset[str]:
+  """Env var names that Config reads (derived from model fields)."""
+  return frozenset(f"GTH_{name.upper()}" for name in Config.model_fields if name != "targets")
 
 
 def load_config(env: dict[str, str] | None = None) -> Config:
@@ -211,7 +179,9 @@ def load_config(env: dict[str, str] | None = None) -> Config:
   if env is not None:
     os.environ.update(env)
 
-  _validate_no_unrecognized_gth_vars(env_dict)
+  # Collect GTH_* keys and mark as used as we parse; fail if any remain unused.
+  unused_gth_keys: set[str] = {k.upper() for k in env_dict if k.upper().startswith("GTH_")}
+  unused_gth_keys -= _config_env_keys()
 
   base_config = Config()
 
@@ -233,6 +203,14 @@ def load_config(env: dict[str, str] | None = None) -> Config:
     apikey_key = f"GTH_ARR_{n}_APIKEY"
     if apikey_key not in env_dict:
       raise ValueError(f"Missing required config: {apikey_key}")
+
+    # Mark target keys as used
+    for key in (type_key, name_key, baseurl_key, apikey_key):
+      unused_gth_keys.discard(key.upper())
+    for suffix in ("OPS_PER_INTERVAL", "INTERVAL_S", "ITEM_REVISIT_TIMEOUT_S"):
+      key = f"GTH_ARR_{n}_{suffix}"
+      if key in env_dict:
+        unused_gth_keys.discard(key.upper())
 
     try:
       arr_type = ArrType(env_dict[type_key].lower())
@@ -286,6 +264,17 @@ def load_config(env: dict[str, str] | None = None) -> Config:
 
   if not targets:
     raise ValueError("At least one *arr target must be configured (GTH_ARR_0_*)")
+
+  if unused_gth_keys:
+    # Preserve original case from env for error message
+    gth_key_to_original: dict[str, str] = {
+      k.upper(): k for k in env_dict if k.upper().startswith("GTH_")
+    }
+    unrecognized = sorted(gth_key_to_original.get(k, k) for k in unused_gth_keys)
+    raise ValueError(
+      f"Unrecognized GTH_* environment variables: {', '.join(unrecognized)}. "
+      "Check configuration for typos or consult the documentation."
+    )
 
   config = Config()
   config.targets = targets
