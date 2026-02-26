@@ -78,6 +78,21 @@ For complex setups, use Docker `.env` files or Docker Secrets for API keys.
 - `GTH_ARR_<n>_MIN_MISSING_EPISODES`: (Optional) Override.
 - `GTH_ARR_<n>_MIN_MISSING_PERCENT`: (Optional) Override.
 
+## Metrics
+
+When `GTH_METRICS_ENABLED` is `true`, Gatherarr exposes a Prometheus-compatible endpoint at `/metrics` on the configured port. The following metrics are exported:
+
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `gatherarr_run_total` | Counter | Total number of scheduler runs | `target`, `type` (radarr/sonarr), `status` (success/error) |
+| `gatherarr_requests_total` | Counter | Total number of *arr API requests (item searches) | `target`, `type` |
+| `gatherarr_request_errors_total` | Counter | Total number of failed API requests | `target`, `type` |
+| `gatherarr_grabs_total` | Counter | Total number of items searched (grabs) | `target`, `type` |
+| `gatherarr_skips_total` | Counter | Total number of items skipped (eligibility/backoff) | `target`, `type` |
+| `gatherarr_request_duration_seconds` | Histogram | Duration of search requests in seconds (buckets: 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0) | `target`, `type` |
+| `gatherarr_last_success_timestamp_seconds` | Gauge | Unix timestamp of last successful run per target | `target`, `type` |
+| `gatherarr_state_write_failures_total` | Counter | Total number of state file write failures | (none) |
+
 ## Goals and Non-Goals
 
 ### Goals
