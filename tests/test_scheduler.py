@@ -138,7 +138,7 @@ def create_target(
   for field in settings_fields:
     if field in overrides:
       settings_kwargs[field] = overrides.pop(field)
-  
+
   target_kwargs: dict[str, Any] = {
     "name": name,
     "arr_type": arr_type,

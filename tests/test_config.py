@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.config import ArrTarget, ArrType, Config, TargetOverrideSettings, TargetSettings, load_config
+from app.config import (
+  ArrTarget,
+  ArrType,
+  Config,
+  TargetOverrideSettings,
+  TargetSettings,
+  load_config,
+)
 
 
 class TestLogLevelParsing:
@@ -106,15 +113,15 @@ class TestLoadConfig:
     assert config.targets[0].arr_type == ArrType.RADARR
     assert config.targets[0].base_url == "http://localhost:7878"
     assert config.targets[0].api_key == "test-key"
-    assert config.targets[0].require_monitored is True
-    assert config.targets[0].require_cutoff_unmet is True
-    assert config.targets[0].released_only is False
-    assert config.targets[0].search_backoff_s == 0
-    assert config.targets[0].dry_run is False
-    assert config.targets[0].include_tags == set()
-    assert config.targets[0].exclude_tags == set()
-    assert config.targets[0].min_missing_episodes == 0
-    assert config.targets[0].min_missing_percent == 0.0
+    assert config.targets[0].settings.require_monitored is True
+    assert config.targets[0].settings.require_cutoff_unmet is True
+    assert config.targets[0].settings.released_only is False
+    assert config.targets[0].settings.search_backoff_s == 0
+    assert config.targets[0].settings.dry_run is False
+    assert config.targets[0].settings.include_tags == set()
+    assert config.targets[0].settings.exclude_tags == set()
+    assert config.targets[0].settings.min_missing_episodes == 0
+    assert config.targets[0].settings.min_missing_percent == 0.0
     assert config.log_level == "INFO"
     assert config.metrics_enabled is True
     assert config.metrics_port == 9090
@@ -143,8 +150,8 @@ class TestLoadConfig:
       assert config.state_file_path == str(state_path)
       assert config.ops_per_interval == 5
       assert config.interval_s == 120
-      assert config.targets[0].ops_per_interval == 10
-      assert config.targets[0].interval_s == 300
+      assert config.targets[0].settings.ops_per_interval == 10
+      assert config.targets[0].settings.interval_s == 300
 
   def test_load_config_with_eligibility_overrides(self) -> None:
     env = {
@@ -377,8 +384,9 @@ class TestArrTarget:
       api_key="test-key",
       settings=TargetSettings(
         ops_per_interval=1,
-      interval_s=60,
-      item_revisit_timeout_s=3600,
+        interval_s=60,
+        item_revisit_timeout_s=3600,
+      ),
     )
     assert target.base_url == "https://example.com:8989"
 

@@ -638,7 +638,10 @@ class SeriesHandler:
 
   def _meets_missing_thresholds(self, item: dict[str, Any]) -> bool:
     """Validate configured series missing-episode thresholds."""
-    if self.target.settings.min_missing_episodes <= 0 and self.target.settings.min_missing_percent <= 0:
+    if (
+      self.target.settings.min_missing_episodes <= 0
+      and self.target.settings.min_missing_percent <= 0
+    ):
       return True
 
     statistics = item.get("statistics")
