@@ -245,7 +245,9 @@ def running_fake_arr_server(
     server.stop()
 
 
-def create_target(name: str, arr_type: ArrType, base_url: str, ops_per_interval: int) -> ArrTarget:
+def create_target(
+  name: str, arr_type: ArrType, base_url: str, ops_per_interval: int, **overrides: Any
+) -> ArrTarget:
   """Build a target for integration tests."""
   from app.config import TargetSettings
 
@@ -258,6 +260,9 @@ def create_target(name: str, arr_type: ArrType, base_url: str, ops_per_interval:
       ops_per_interval=ops_per_interval,
       interval_s=60,
       item_revisit_timeout_s=3600,
+      require_monitored=overrides.get("require_monitored", True),
+      require_cutoff_unmet=overrides.get("require_cutoff_unmet", True),
+      **{k: v for k, v in overrides.items() if k not in ("require_monitored", "require_cutoff_unmet")},
     ),
   )
 
@@ -343,10 +348,21 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
       )
 
       seasons = await arr_client.get_seasons({"run_id": "integration-sonarr-success"})
-      assert seasons == [
-        {"seriesId": 22, "seriesTitle": "Integration Series", "seasonNumber": 1},
-        {"seriesId": 22, "seriesTitle": "Integration Series", "seasonNumber": 2},
-      ]
+      assert len(seasons) == 2
+      assert seasons[0]["seriesId"] == 22
+      assert seasons[0]["seriesTitle"] == "Integration Series"
+      assert seasons[0]["seasonNumber"] == 1
+      assert seasons[1]["seriesId"] == 22
+      assert seasons[1]["seriesTitle"] == "Integration Series"
+      assert seasons[1]["seasonNumber"] == 2
+      # Check that new fields are present (may be None)
+      for season in seasons:
+        assert "seriesMonitored" in season
+        assert "seriesTags" in season
+        assert "seriesStatistics" in season
+        assert "seriesFirstAired" in season
+        assert "seasonMonitored" in season
+        assert "seasonStatistics" in season
 
       command_result = await arr_client.search_season(
         SeasonId(series_id=22, season_number=1, series_name="Integration Series"),
@@ -368,7 +384,17 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
 async def test_metrics_endpoint_exposes_target_metrics_after_scheduler_run(tmp_path: Path) -> None:
   responses = {
     ("GET", "/api/v3/movie"): [
-      ResponseSpec(status_code=200, body=[{"id": 202, "title": "Metrics Movie"}]),
+      ResponseSpec(
+        status_code=200,
+        body=[
+          {
+            "id": 202,
+            "title": "Metrics Movie",
+            "monitored": True,
+            "hasFile": False,
+          }
+        ],
+      ),
     ],
     ("POST", "/api/v3/command"): [
       ResponseSpec(status_code=200, body={"id": 902, "status": "queued"}),

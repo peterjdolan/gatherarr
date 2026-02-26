@@ -39,7 +39,7 @@ def _parse_utc_datetime(value: Any) -> datetime | None:
 
   try:
     parsed = dateutil_parser.parse(normalized)
-  except ValueError, TypeError:
+  except (ValueError, TypeError):
     return None
 
   if parsed.tzinfo is None:

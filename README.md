@@ -42,7 +42,16 @@ Configuration is done by environment variables only. Docker Compose users are we
 - `GTH_METRICS_PORT`: (Optional) Metrics endpoint port, default `9090`.
 - `GTH_OPS_PER_INTERVAL`: (Optional) Common number of operations to perform per interval time, default `1`.
 - `GTH_INTERVAL_S`: (Optional) Common interval duration in seconds, default `60`.
-- `GTH_ITEM_REVISIT_S`: (Optional) Minimum time in seconds to wait before reprocessing a previously processed item, default `604800` (one week).
+- `GTH_ITEM_REVISIT_S`: (Optional) Minimum time in seconds to wait before reprocessing a previously successfully processed item, default `604800` (one week).
+- `GTH_REQUIRE_MONITORED`: (Optional) Only search monitored items, `true|false`, default `true`.
+- `GTH_REQUIRE_CUTOFF_UNMET`: (Optional) Only search items that haven't met quality cutoff, `true|false`, default `true`.
+- `GTH_RELEASED_ONLY`: (Optional) Only search items that have been released, `true|false`, default `false`.
+- `GTH_SEARCH_BACKOFF_S`: (Optional) Minimum time in seconds to wait before retrying a previously failed item search, default `0` (no backoff).
+- `GTH_DRY_RUN`: (Optional) Test eligibility without actually searching, `true|false`, default `false`.
+- `GTH_INCLUDE_TAGS`: (Optional) Comma-separated list of tags. Items must have at least one matching tag, default empty (no filter).
+- `GTH_EXCLUDE_TAGS`: (Optional) Comma-separated list of tags. Items with any matching tag are excluded, default empty (no filter).
+- `GTH_MIN_MISSING_EPISODES`: (Optional) For Sonarr, minimum number of missing episodes required, default `0` (no threshold).
+- `GTH_MIN_MISSING_PERCENT`: (Optional) For Sonarr, minimum percentage of missing episodes required (0.0-100.0), default `0.0` (no threshold).
 
 ### Per-target configuration
 
@@ -50,9 +59,18 @@ Configuration is done by environment variables only. Docker Compose users are we
 - `GTH_ARR_<n>_NAME`: (Required) instance identifier for logging.
 - `GTH_ARR_<n>_BASEURL`: (Required) base URL for the Radarr/Sonarr instance (e.g., `http://radarr:7878`).
 - `GTH_ARR_<n>_APIKEY`: (Required) API key for the instance.
-- `GTH_ARR_<n>_OPS_PER_INTERVAL`: (Optional) override.
-- `GTH_ARR_<n>_INTERVAL_S`: (Optional) override.
-- `GTH_ARR_<n>_ITEM_REVISIT_TIMEOUT_S`: (Optional) override.
+- `GTH_ARR_<n>_OPS_PER_INTERVAL`: (Optional) Override.
+- `GTH_ARR_<n>_INTERVAL_S`: (Optional) Override.
+- `GTH_ARR_<n>_ITEM_REVISIT_TIMEOUT_S`: (Optional) Override.
+- `GTH_ARR_<n>_REQUIRE_MONITORED`: (Optional) Override.
+- `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`: (Optional) Override.
+- `GTH_ARR_<n>_RELEASED_ONLY`: (Optional) Override.
+- `GTH_ARR_<n>_SEARCH_BACKOFF_S`: (Optional) Override.
+- `GTH_ARR_<n>_DRY_RUN`: (Optional) Override.
+- `GTH_ARR_<n>_INCLUDE_TAGS`: (Optional) Override.
+- `GTH_ARR_<n>_EXCLUDE_TAGS`: (Optional) Override.
+- `GTH_ARR_<n>_MIN_MISSING_EPISODES`: (Optional) Override.
+- `GTH_ARR_<n>_MIN_MISSING_PERCENT`: (Optional) Override.
 
 ## Goals and Non-Goals
 
