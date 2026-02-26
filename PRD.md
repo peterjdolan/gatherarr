@@ -9,9 +9,9 @@ with low operational complexity.
 ## Functional Requirements
 
 - Load all runtime settings from environment variables at startup.
-- Validate config and fail fast with clear errors for missing/invalid values.
-- Reject startup if any unrecognized environment variables starting with `GTH_` are
-  present (e.g. typos like `GTH_ARR_0_TYPO` or obsolete vars).
+- Validate config and fail fast with clear errors for missing/invalid values. On validation failure, output a concise summary of all detected issues (missing vars, invalid values, duplicate target names).
+- Reject duplicate target names (`GTH_ARR_<n>_NAME`); each target must have a unique name.
+- Reject startup if any unrecognized environment variables starting with `GTH_` are present (e.g. typos like `GTH_ARR_0_TYPO` or obsolete vars).
 - For each configured target instance:
   - authenticate via API key,
   - issue supported search action(s),
@@ -23,7 +23,8 @@ with low operational complexity.
   - Series-wide searches
   - Episode-level searches
 - Execute runs at configured intervals with per-target and global operation limits.
-- Handle transient API failures using bounded retry/backoff.
+- Handle transient API failures using configurable HTTP retry with exponential backoff.
+- When an item search fails, apply configurable failed-search retry backoff before reattempting.
 - Persist state after each run or attempt outcome.
 - Recover previous state on restart.
 - Expose Prometheus metrics endpoint (`/metrics`).
@@ -59,17 +60,14 @@ Gatherarr supports configurable filtering criteria to determine which items are 
   - `min_missing_percent`: Minimum percentage of missing episodes required (0.0-100.0).
   - Both thresholds must be satisfied if both are set to non-zero values.
 
-### Search Backoff
+### Search Backoff (Failed-Search Retry)
 
-- **Search Backoff** (`search_backoff_s`, default: `0`):
-  - When an item search fails, wait at least this many seconds before attempting to search again.
-  - Only applies to items with previous error status.
-  - When set to `0`, no backoff is applied (failed items can be retried immediately if revisit timeout allows).
+See **Retry Configuration** for full failed-search retry parameters. Items with previous error status are subject to the configured retry backoff before being eligible again. Legacy `search_backoff_s` is superseded by the new parameters when both are present.
 
 ### Revisit Behavior
 
 - Items that were successfully searched are subject to `item_revisit_s` before being eligible again.
-- Items that failed are subject to `search_backoff_s` (if configured) before being eligible again.
+- Items that failed are subject to the failed-search retry backoff (see Retry Configuration) before being eligible again.
 - Revisit timeout and search backoff are independent and both must be satisfied.
 
 ### Dry Run Mode
@@ -77,6 +75,30 @@ Gatherarr supports configurable filtering criteria to determine which items are 
 - **Dry Run** (`dry_run`, default: `false`):
   - When enabled, eligibility checks are performed and items are marked as eligible in state, but no actual search API calls are made.
   - Useful for testing eligibility criteria without triggering searches.
+
+## Retry Configuration
+
+Gatherarr supports configurable retry behavior for two scenarios: transient HTTP failures and failed item searches. All parameters support global defaults with per-target overrides.
+
+### HTTP Retries
+
+Applied when an HTTP request to a *arr API fails with a retryable error (network error, `5xx`, `429`):
+
+- **HTTP max retries** (`http_max_retries`): Maximum number of retry attempts per request. Default: `3`.
+- **HTTP initial retry delay** (`http_retry_initial_delay_s`): Delay in seconds before the first retry. Default: `1.0`.
+- **HTTP retry backoff exponent** (`http_retry_backoff_exponent`): Multiplier for exponential backoff (e.g. `2.0` means delay doubles each attempt). Default: `2.0`.
+- **HTTP retry max delay** (`http_retry_max_delay_s`): Cap on delay between retries in seconds. Default: `30.0`.
+
+### Failed-Search Retries
+
+Applied when an item's search fails; determines how long to wait before retrying that item on a subsequent run:
+
+- **Search max retries** (`search_retry_max_attempts`): Maximum retry attempts for a failed item (`0` = retry indefinitely). Default: `0`.
+- **Search initial retry delay** (`search_retry_initial_delay_s`): Initial delay in seconds before first retry. Default: `60`.
+- **Search retry backoff exponent** (`search_retry_backoff_exponent`): Multiplier for exponential backoff. Default: `2.0`.
+- **Search retry max delay** (`search_retry_max_delay_s`): Cap on delay between retries in seconds. Default: `86400` (24 hours).
+
+When both `search_backoff_s` (legacy) and the new failed-search retry parameters are present, the new parameters take precedence.
 
 ## State Management Requirements
 
@@ -94,8 +116,16 @@ Gatherarr supports configurable filtering criteria to determine which items are 
   - log parsing error,
   - move file aside as `.corrupt.<timestamp>`,
   - continue with fresh state.
+- Optional state pruning: support configurable retention to drop item state entries that have not been processed within a threshold (e.g. `state_prune_days`) to prevent unbounded growth.
 
 ## Observability Requirements
+
+### Startup Banner
+
+- At startup, after configuration is loaded and validated, emit a startup banner to logs.
+- The banner MUST display an easily readable copy of the full configuration (global settings and per-target settings).
+- Purpose: allow users to quickly verify their per-target configuration is as expected before the first run.
+- Omit sensitive values (API keys) from the banner; redact or omit entirely.
 
 ### Metrics (minimum)
 
@@ -119,21 +149,22 @@ Gatherarr supports configurable filtering criteria to determine which items are 
 
 ## Reliability and Security Requirements
 
-- Apply explicit timeouts for all external HTTP calls.
-- Retry only retryable failures (`network`, `5xx`, `429`).
-- Use a logging redaction layer to mask API key parameters in all structured log output.
+- Apply configurable timeouts for all external HTTP calls (`http_timeout_s`, default: `30`).
+- Retry only retryable failures (`network`, `5xx`, `429`) using configurable HTTP retry (see Retry Configuration).
+- Use a logging redaction layer to mask sensitive parameters in all structured log output (API keys, `Authorization`, `Cookie`, bearer tokens, and similar).
 - Never log API keys or full auth headers.
 - `/metrics` is served without built-in authentication; deployments that need auth MUST enforce it via external auth controls and/or network access restrictions.
 - If a target `base_url` uses plain HTTP, API keys are transmitted in cleartext over the network; use HTTPS wherever possible.
-- Graceful shutdown should finish in-flight work or stop within timeout.
+- Graceful shutdown should finish in-flight work or stop within a configurable timeout (`shutdown_timeout_s`, default: `30`).
 - Container runtime must run as non-root.
 
 ## Testing and Quality Requirements
 
 - Unit tests:
-  - config parsing and validation,
+  - config parsing and validation (including duplicate target names),
   - scheduler timing logic,
-  - retry/backoff behavior,
+  - HTTP retry/backoff behavior,
+  - failed-search retry/backoff behavior,
   - state serialization and atomic write behavior,
   - metrics emission helpers,
   - search eligibility filtering logic (monitored status, cutoff unmet, release status, tag filtering, missing episode thresholds),
@@ -154,6 +185,34 @@ Gatherarr supports configurable filtering criteria to determine which items are 
 - Build and publish a single Docker image.
 - Read configuration only from environment variables.
 - Require persistent mount for state file path.
-- Expose one health endpoint (`/health`) that returns `"OK"` only when:
+- Expose a health endpoint (`/health`) that returns `"OK"` only when:
   - liveness is satisfied (process is running), and
   - readiness is satisfied (configuration is valid and scheduler is initialized).
+- The health endpoint MUST always be available and served, regardless of whether the metrics endpoint is enabled. When metrics are disabled, a minimal HTTP server still runs to serve `/health`.
+
+## Milestones
+
+### v0.1 (Current)
+
+**Scope:** Radarr and Sonarr only.
+
+**Planned features and changes:**
+
+- **Retry configuration**
+  - HTTP retries: configurable `http_max_retries`, `http_retry_initial_delay_s`, `http_retry_backoff_exponent`, `http_retry_max_delay_s` (global and per-target).
+  - Failed-search retries: configurable `search_retry_max_attempts`, `search_retry_initial_delay_s`, `search_retry_backoff_exponent`, `search_retry_max_delay_s` (global and per-target). Supersedes legacy `search_backoff_s` when both are present.
+- **HTTP timeout:** Configurable `http_timeout_s` for all external HTTP calls.
+- **Graceful shutdown:** Configurable `shutdown_timeout_s`; finish in-flight work or stop within timeout.
+- **Startup banner:** Emit an easily readable copy of the full configuration (global and per-target) at startup so users can verify per-target configuration. Exclude API keys.
+- **Health always live:** Serve `/health` even when metrics are disabled; run a minimal HTTP server for health regardless of `GTH_METRICS_ENABLED`.
+- **Config validation:** On startup failure, output a concise summary of all validation issues (missing vars, invalid values). Reject duplicate target names.
+- **Log redaction:** Expand sensitive-key redaction to cover `Authorization`, `Cookie`, bearer tokens, and similar.
+- **State pruning (optional):** Support configurable `state_prune_days` to drop stale item state entries.
+
+### v0.2 (Future)
+
+**Scope:** Additional *arr apps.
+
+- Lidarr support.
+- Whisparr support.
+- Any app-specific eligibility logic for new apps.
