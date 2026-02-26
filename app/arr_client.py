@@ -16,7 +16,7 @@ from app.action_logging import Action
 from app.config import ArrTarget, ArrType
 
 if TYPE_CHECKING:
-  from app.scheduler import MovieId, SeasonId, SeriesId
+  from app.scheduler import MovieId, SeasonId
 
 logger = structlog.get_logger()
 
@@ -185,32 +185,6 @@ class ArrClient:
     logger.debug("Extracted seasons from series payload", season_count=len(seasons), **logging_ids)
     return seasons
 
-  async def get_series(self, logging_ids: dict[str, Any]) -> list[dict[str, Any]]:
-    """Get all series from Sonarr."""
-    if self.target.arr_type != ArrType.SONARR:
-      raise ValueError(f"get_series() only supported for sonarr, got {self.target.arr_type}")
-    url = f"{self.base_url}/api/v3/series"
-
-    get_series_logging_ids = {
-      "action": Action.GET_SERIES,
-      "url": url,
-      **logging_ids,
-      **self.target.logging_ids(),
-    }
-    logger.debug("Fetching series", **get_series_logging_ids)
-    try:
-      result = await self._request("GET", url, get_series_logging_ids)
-      series_count = len(result) if isinstance(result, list) else 0
-      logger.debug("Fetched series", series_count=series_count, **get_series_logging_ids)
-      return cast(list[dict[str, Any]], result)
-    except Exception as e:
-      logger.exception(
-        "Exception while fetching series",
-        exception=e,
-        **get_series_logging_ids,
-      )
-      raise
-
   async def get_seasons(self, logging_ids: dict[str, Any]) -> list[dict[str, Any]]:
     """Get season-level search items from Sonarr series payloads."""
     if self.target.arr_type != ArrType.SONARR:
@@ -268,37 +242,6 @@ class ArrClient:
     except Exception as e:
       logger.exception(
         "Exception while searching movie",
-        exception=e,
-        **search_logging_ids,
-      )
-      raise
-
-  async def search_series(
-    self, series_id: "SeriesId", logging_ids: dict[str, Any]
-  ) -> dict[str, Any]:
-    """Trigger search for a series in Sonarr."""
-    if self.target.arr_type != ArrType.SONARR:
-      raise ValueError(f"search_series() only supported for sonarr, got {self.target.arr_type}")
-
-    url = f"{self.base_url}/api/v3/command"
-    payload = {"name": "SeriesSearch", "seriesId": series_id.series_id}
-    search_logging_ids = {
-      "action": Action.SEARCH_SERIES,
-      "url": url,
-      "payload": payload,
-      "series_id": series_id.series_id,
-      "series_name": series_id.series_name,
-      **logging_ids,
-      **self.target.logging_ids(),
-    }
-    logger.debug("Searching series", **search_logging_ids)
-    try:
-      result = await self._request("POST", url, search_logging_ids, payload)
-      logger.debug("Series searched", **search_logging_ids)
-      return cast(dict[str, Any], result)
-    except Exception as e:
-      logger.exception(
-        "Exception while searching series",
         exception=e,
         **search_logging_ids,
       )

@@ -6,17 +6,15 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 if TYPE_CHECKING:
-  from app.scheduler import ItemId, MovieId, SeasonId, SeriesId
+  from app.scheduler import ItemId, MovieId, SeasonId
 
 
 class Action(StrEnum):
   """Actions that can be logged."""
 
   GET_MOVIES = "get_movies"
-  GET_SERIES = "get_series"
   GET_SEASONS = "get_seasons"
   SEARCH_MOVIE = "search_movie"
-  SEARCH_SERIES = "search_series"
   SEARCH_SEASON = "search_season"
 
 

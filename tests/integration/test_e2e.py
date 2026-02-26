@@ -247,14 +247,18 @@ def running_fake_arr_server(
 
 def create_target(name: str, arr_type: ArrType, base_url: str, ops_per_interval: int) -> ArrTarget:
   """Build a target for integration tests."""
+  from app.config import TargetSettings
+
   return ArrTarget(
     name=name,
     arr_type=arr_type,
     base_url=base_url,
     api_key="integration-key",
-    ops_per_interval=ops_per_interval,
-    interval_s=60,
-    item_revisit_timeout_s=3600,
+    settings=TargetSettings(
+      ops_per_interval=ops_per_interval,
+      interval_s=60,
+      item_revisit_timeout_s=3600,
+    ),
   )
 
 

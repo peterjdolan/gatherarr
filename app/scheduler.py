@@ -8,7 +8,7 @@ from typing import Any, Protocol
 
 import structlog
 
-from app.action_logging import Action, log_item_action, log_movie_action, log_season_action
+from app.action_logging import Action, log_movie_action, log_season_action
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
 from app.metrics import (
@@ -76,25 +76,6 @@ class MovieId(ItemId):
     return {
       "movie_id": str(self.movie_id),
       "movie_name": self.movie_name if self.movie_name is not None else "None",
-    }
-
-
-@dataclass
-class SeriesId(ItemId):
-  """Item identifier for series."""
-
-  series_id: int
-  series_name: str | None
-
-  def format_for_state(self) -> str:
-    """Format series ID and name for state lookup."""
-    return str(self.series_id)
-
-  def logging_ids(self) -> dict[str, Any]:
-    """Get logging identifiers for the series."""
-    return {
-      "series_id": str(self.series_id),
-      "series_name": self.series_name if self.series_name is not None else "None",
     }
 
 
@@ -208,8 +189,8 @@ class Scheduler:
         items = await client.get_movies(combined_logging_ids)
         handler = MovieHandler(target)
       elif target.arr_type == ArrType.SONARR:
-        items = await client.get_series(combined_logging_ids)
-        handler = SeriesHandler(target)
+        items = await client.get_seasons(combined_logging_ids)
+        handler = SeasonHandler()
       else:
         raise ValueError(f"Unsupported target type: {target.arr_type}")
 
@@ -585,147 +566,18 @@ class MovieHandler:
     )
 
 
-class SeriesHandler:
-  """Handler for processing series.
+class SeasonHandler:
+  """Handler for processing individual seasons."""
 
-  This handler is responsible for extracting the item ID and logging identifiers for series.
-  It also triggers the search for the series and logs the action. It is used to handle series-wide
-  searches, but not season-specific or episode-specific searches.
-  """
-
-  def __init__(self, target: ArrTarget) -> None:
-    self.target = target
-
-  def should_search(self, item: dict[str, Any]) -> bool:
-    """Return True when series satisfies configured eligibility rules."""
-    if self.target.settings.require_monitored and item.get("monitored") is not True:
-      return False
-    if self.target.settings.require_cutoff_unmet and not self._is_cutoff_unmet(item):
-      return False
-    if not tag_filter(
-      extract_item_tags(item),
-      self.target.settings.include_tags,
-      self.target.settings.exclude_tags,
-    ):
-      return False
-    if self.target.settings.released_only and not self._is_released(item):
-      return False
-    if not self._meets_missing_thresholds(item):
-      return False
-    return True
-
-  def _is_cutoff_unmet(self, item: dict[str, Any]) -> bool:
-    """Determine whether Sonarr quality cutoff has not been reached."""
-    statistics = item.get("statistics")
-    if not isinstance(statistics, dict):
-      return False
-
-    quality_cutoff_not_met = statistics.get("qualityCutoffNotMet")
-    if isinstance(quality_cutoff_not_met, bool):
-      return quality_cutoff_not_met
-
-    episode_file_count = statistics.get("episodeFileCount")
-    total_episode_count = statistics.get("totalEpisodeCount")
-    if (
-      isinstance(episode_file_count, int)
-      and not isinstance(episode_file_count, bool)
-      and isinstance(total_episode_count, int)
-      and not isinstance(total_episode_count, bool)
-    ):
-      return episode_file_count < total_episode_count
-
-    percent_of_episodes = statistics.get("percentOfEpisodes")
-    if isinstance(percent_of_episodes, float):
-      return percent_of_episodes < 100.0
-    if isinstance(percent_of_episodes, int) and not isinstance(percent_of_episodes, bool):
-      return percent_of_episodes < 100
-
-    return False
-
-  def _is_released(self, item: dict[str, Any]) -> bool:
-    """Determine whether a series has released episodes."""
-    now = datetime.now(timezone.utc)
-    first_aired = _parse_utc_datetime(item.get("firstAired"))
-    if first_aired is not None and first_aired <= now:
-      return True
-
-    statistics = item.get("statistics")
-    if not isinstance(statistics, dict):
-      return False
-    episode_file_count = statistics.get("episodeFileCount")
-    if isinstance(episode_file_count, int) and not isinstance(episode_file_count, bool):
-      return episode_file_count > 0
-    return False
-
-  def _meets_missing_thresholds(self, item: dict[str, Any]) -> bool:
-    """Validate configured series missing-episode thresholds."""
-    if (
-      self.target.settings.min_missing_episodes <= 0
-      and self.target.settings.min_missing_percent <= 0
-    ):
-      return True
-
-    statistics = item.get("statistics")
-    if not isinstance(statistics, dict):
-      return False
-
-    missing_episode_count = self._missing_episode_count(statistics)
-    if self.target.settings.min_missing_episodes > 0:
-      if missing_episode_count is None:
-        return False
-      if missing_episode_count < self.target.settings.min_missing_episodes:
-        return False
-
-    missing_percent = self._missing_percent(statistics, missing_episode_count)
-    if self.target.settings.min_missing_percent > 0:
-      if missing_percent is None:
-        return False
-      if missing_percent < self.target.settings.min_missing_percent:
-        return False
-
-    return True
-
-  def _missing_episode_count(self, statistics: dict[str, Any]) -> int | None:
-    """Calculate missing episodes from statistics counters."""
-    episode_file_count = statistics.get("episodeFileCount")
-    total_episode_count = statistics.get("totalEpisodeCount")
-    if (
-      isinstance(episode_file_count, int)
-      and not isinstance(episode_file_count, bool)
-      and isinstance(total_episode_count, int)
-      and not isinstance(total_episode_count, bool)
-    ):
-      return max(total_episode_count - episode_file_count, 0)
-    return None
-
-  def _missing_percent(
-    self, statistics: dict[str, Any], missing_episode_count: int | None
-  ) -> float | None:
-    """Calculate missing percent from statistics counters."""
-    percent_of_episodes = statistics.get("percentOfEpisodes")
-    if isinstance(percent_of_episodes, float):
-      return max(100.0 - percent_of_episodes, 0.0)
-    if isinstance(percent_of_episodes, int) and not isinstance(percent_of_episodes, bool):
-      return max(100.0 - float(percent_of_episodes), 0.0)
-
-    total_episode_count = statistics.get("totalEpisodeCount")
-    if (
-      missing_episode_count is not None
-      and isinstance(total_episode_count, int)
-      and not isinstance(total_episode_count, bool)
-      and total_episode_count > 0
-    ):
-      return (missing_episode_count / total_episode_count) * 100.0
-    return None
-
-  def extract_item_id(self, item: dict[str, Any]) -> SeriesId | None:
-    """Extract item ID for state tracking."""
-    series_id = item.get("id")
-    if series_id is None:
+  def extract_item_id(self, item: dict[str, Any]) -> SeasonId | None:
+    """Extract season ID for state tracking."""
+    series_id = item.get("seriesId")
+    season_number = item.get("seasonNumber")
+    if series_id is None or season_number is None:
       return None
 
-    series_name = item.get("title")
-    return SeriesId(series_id=series_id, series_name=series_name)
+    series_name = item.get("seriesTitle")
+    return SeasonId(series_id=series_id, season_number=season_number, series_name=series_name)
 
   def extract_logging_id(self, item: dict[str, Any]) -> dict[str, str]:
     """Extract logging identifiers."""
@@ -733,13 +585,15 @@ class SeriesHandler:
     if item_id is None:
       return {}
 
-    series_id = item_id.series_id
-    series_name = item.get("title")
-
     return {
-      "series_id": str(series_id),
-      "series_name": series_name if series_name is not None else "None",
+      "series_id": str(item_id.series_id),
+      "season_number": str(item_id.season_number),
+      "series_name": item_id.series_name if item_id.series_name is not None else "None",
     }
+
+  def should_search(self, item: dict[str, Any]) -> bool:
+    """Return True when season should be searched."""
+    return True
 
   async def search(
     self,
@@ -747,19 +601,19 @@ class SeriesHandler:
     item: dict[str, Any],
     logging_ids: dict[str, Any],
   ) -> None:
-    """Trigger search for a series and log the action."""
+    """Trigger search for a season and log the action."""
 
-    item_id = self.extract_item_id(item)
-    if item_id is None:
-      raise ValueError("Series ID is required")
+    season_id = self.extract_item_id(item)
+    if season_id is None:
+      raise ValueError("Season ID is required")
 
     item_logging_ids = self.extract_logging_id(item)
     combined_logging_ids = {**logging_ids, **item_logging_ids}
-    await client.search_series(item_id, logging_ids=combined_logging_ids)
+    await client.search_season(season_id, logging_ids=combined_logging_ids)
 
-    log_item_action(
+    log_season_action(
       logger=logger,
-      action=Action.SEARCH_SERIES,
-      item_id=item_id,
+      action=Action.SEARCH_SEASON,
+      season_id=season_id,
       **logging_ids,
     )

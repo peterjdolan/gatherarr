@@ -228,8 +228,7 @@ class Config(BaseSettings):
   state_file_path: str | None = "/data/state.yaml"
   ops_per_interval: int = Field(default=1, ge=1)
   interval_s: int = Field(default=60, ge=1)
-<<<<<<< HEAD
-  item_revisit_s: int = Field(default=86400, ge=1)
+  item_revisit_s: int = Field(default=604800, ge=1)
   require_monitored: bool = True
   require_cutoff_unmet: bool = True
   released_only: bool = False
@@ -239,9 +238,6 @@ class Config(BaseSettings):
   exclude_tags: str = ""
   min_missing_episodes: int = Field(default=0, ge=0)
   min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
-=======
-  item_revisit_s: int = Field(default=604800, ge=1)
->>>>>>> origin/main
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
 
   @field_validator("log_level")

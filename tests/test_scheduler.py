@@ -20,25 +20,18 @@ class FakeArrClient:
     self.target = target
     self.get_movies_called = False
     self.get_seasons_called = False
-    self.get_series_called = False
     self.search_movie_called = False
-    self.search_series_called = False
+    self.search_season_called = False
     self.search_movie_calls = 0
-    self.search_series_calls = 0
     self.search_movie_id: Any | None = None
-    self.search_series_id: int | None = None
+    self.search_season_series_id: int | None = None
+    self.search_season_number: int | None = None
 
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_movies_called = True
     return [
       {"id": 1, "title": "Movie 1", "monitored": True, "hasFile": False},
       {"id": 2, "title": "Movie 2", "monitored": True, "movieFile": {"qualityCutoffNotMet": True}},
-    ]
-
-  async def get_series(self, logging_ids: dict[str, Any]) -> list[dict]:
-    self.get_series_called = True
-    return [
-      {"id": 1, "title": "Series 1", "monitored": True, "statistics": {"qualityCutoffNotMet": True}}
     ]
 
   async def get_seasons(self, logging_ids: dict[str, Any]) -> list[dict]:
@@ -49,12 +42,6 @@ class FakeArrClient:
     self.search_movie_called = True
     self.search_movie_calls += 1
     self.search_movie_id = movie_id
-    return {"id": 1}
-
-  async def search_series(self, series_id: Any, logging_ids: dict[str, Any]) -> dict:
-    self.search_series_called = True
-    self.search_series_calls += 1
-    self.search_series_id = series_id.series_id if hasattr(series_id, "series_id") else series_id
     return {"id": 1}
 
   async def search_season(self, season_id: Any, logging_ids: dict[str, Any]) -> dict:
@@ -87,17 +74,6 @@ class FakeClientWithIneligibleItems(FakeArrClient):
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_movies_called = True
     return [{"id": 1, "title": "Movie 1", "monitored": False, "hasFile": False}]
-
-  async def get_series(self, logging_ids: dict[str, Any]) -> list[dict]:
-    self.get_series_called = True
-    return [
-      {
-        "id": 1,
-        "title": "Series 1",
-        "monitored": True,
-        "statistics": {"episodeFileCount": 10, "totalEpisodeCount": 10},
-      }
-    ]
 
 
 class FakeClientWithSingleEligibleMovie(FakeArrClient):
@@ -204,9 +180,10 @@ class TestScheduler:
 
     await scheduler.run_once(target)
 
-    assert fake_client.get_series_called
-    assert fake_client.search_series_called
-    assert fake_client.search_series_id == 1
+    assert fake_client.get_seasons_called
+    assert fake_client.search_season_called
+    assert fake_client.search_season_series_id == 1
+    assert fake_client.search_season_number == 1
 
   @pytest.mark.asyncio
   async def test_run_once_respects_ops_limit(self, state_manager: StateManager) -> None:
@@ -271,15 +248,16 @@ class TestScheduler:
     assert not fake_client.search_movie_called
 
   @pytest.mark.asyncio
-  async def test_run_once_skips_series_when_cutoff_met(self, state_manager: StateManager) -> None:
+  async def test_run_once_searches_seasons(self, state_manager: StateManager) -> None:
+    """Test that seasons are searched when fetched."""
     target = create_target("test-sonarr", ArrType.SONARR)
     fake_client = FakeClientWithIneligibleItems(target)
     scheduler = create_scheduler(target, state_manager, fake_client)
 
     await scheduler.run_once(target)
 
-    assert fake_client.get_series_called
-    assert not fake_client.search_series_called
+    assert fake_client.get_seasons_called
+    assert fake_client.search_season_called
 
   @pytest.mark.asyncio
   async def test_run_once_dry_run_does_not_call_search(self, state_manager: StateManager) -> None:

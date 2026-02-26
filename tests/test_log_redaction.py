@@ -44,14 +44,18 @@ class TestLogRedaction:
 
   def test_redacts_sensitive_fields_in_pydantic_models(self) -> None:
     """Redaction should sanitize pydantic model fields named api_key."""
+    from app.config import TargetSettings
+
     target = ArrTarget(
       name="Test Target",
       arr_type=ArrType.RADARR,
       base_url="http://radarr:7878",
       api_key="model-secret",
-      ops_per_interval=1,
-      interval_s=60,
-      item_revisit_timeout_s=86400,
+      settings=TargetSettings(
+        ops_per_interval=1,
+        interval_s=60,
+        item_revisit_timeout_s=86400,
+      ),
     )
 
     redacted = redact_sensitive_fields(
