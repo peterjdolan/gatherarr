@@ -135,12 +135,14 @@ class TestLoadConfig:
         "GTH_STATE_FILE_PATH": str(state_path),
         "GTH_OPS_PER_INTERVAL": "5",
         "GTH_INTERVAL_S": "120",
+        "GTH_ITEM_REVISIT_S": "86400",
         "GTH_ARR_0_TYPE": "sonarr",
         "GTH_ARR_0_NAME": "sonarr1",
         "GTH_ARR_0_BASEURL": "http://sonarr:8989",
         "GTH_ARR_0_APIKEY": "key1",
         "GTH_ARR_0_OPS_PER_INTERVAL": "10",
         "GTH_ARR_0_INTERVAL_S": "300",
+        "GTH_ARR_0_ITEM_REVISIT_S": "3600",
       }
       config = load_config(env)
       assert config.log_level == "DEBUG"
@@ -149,8 +151,87 @@ class TestLoadConfig:
       assert config.state_file_path == str(state_path)
       assert config.ops_per_interval == 5
       assert config.interval_s == 120
+      assert config.item_revisit_s == 86400
       assert config.targets[0].settings.ops_per_interval == 10
       assert config.targets[0].settings.interval_s == 300
+      assert config.targets[0].settings.item_revisit_s == 3600
+
+  def test_target_overrides_global_config_for_specific_target(self) -> None:
+    """Verify GTH_ARR_<n>_* overrides apply to that target; others inherit global values."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_OPS_PER_INTERVAL": "3",
+      "GTH_INTERVAL_S": "90",
+      "GTH_ITEM_REVISIT_S": "86400",
+      "GTH_REQUIRE_MONITORED": "false",
+      "GTH_REQUIRE_CUTOFF_UNMET": "false",
+      "GTH_RELEASED_ONLY": "true",
+      "GTH_SEARCH_BACKOFF_S": "60",
+      "GTH_DRY_RUN": "true",
+      "GTH_INCLUDE_TAGS": "global_inc",
+      "GTH_EXCLUDE_TAGS": "global_exc",
+      "GTH_MIN_MISSING_EPISODES": "1",
+      "GTH_MIN_MISSING_PERCENT": "10.0",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr1:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_0_OPS_PER_INTERVAL": "7",
+      "GTH_ARR_0_INTERVAL_S": "180",
+      "GTH_ARR_0_ITEM_REVISIT_S": "3600",
+      "GTH_ARR_0_REQUIRE_MONITORED": "true",
+      "GTH_ARR_0_REQUIRE_CUTOFF_UNMET": "true",
+      "GTH_ARR_0_RELEASED_ONLY": "false",
+      "GTH_ARR_0_SEARCH_BACKOFF_S": "120",
+      "GTH_ARR_0_DRY_RUN": "false",
+      "GTH_ARR_0_INCLUDE_TAGS": "radarr_tag",
+      "GTH_ARR_0_EXCLUDE_TAGS": "radarr_block",
+      "GTH_ARR_0_MIN_MISSING_EPISODES": "5",
+      "GTH_ARR_0_MIN_MISSING_PERCENT": "25.0",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "sonarr1",
+      "GTH_ARR_1_BASEURL": "http://sonarr1:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+    }
+    config = load_config(env)
+    assert config.ops_per_interval == 3
+    assert config.interval_s == 90
+    assert config.item_revisit_s == 86400
+    assert config.require_monitored is False
+    assert config.require_cutoff_unmet is False
+    assert config.released_only is True
+    assert config.search_backoff_s == 60
+    assert config.dry_run is True
+    assert config.include_tags == "global_inc"
+    assert config.exclude_tags == "global_exc"
+    assert config.min_missing_episodes == 1
+    assert config.min_missing_percent == 10.0
+    t0 = config.targets[0]
+    assert t0.settings.ops_per_interval == 7
+    assert t0.settings.interval_s == 180
+    assert t0.settings.item_revisit_s == 3600
+    assert t0.settings.require_monitored is True
+    assert t0.settings.require_cutoff_unmet is True
+    assert t0.settings.released_only is False
+    assert t0.settings.search_backoff_s == 120
+    assert t0.settings.dry_run is False
+    assert t0.settings.include_tags == {"radarr_tag"}
+    assert t0.settings.exclude_tags == {"radarr_block"}
+    assert t0.settings.min_missing_episodes == 5
+    assert t0.settings.min_missing_percent == 25.0
+    t1 = config.targets[1]
+    assert t1.settings.ops_per_interval == 3
+    assert t1.settings.interval_s == 90
+    assert t1.settings.item_revisit_s == 86400
+    assert t1.settings.require_monitored is False
+    assert t1.settings.require_cutoff_unmet is False
+    assert t1.settings.released_only is True
+    assert t1.settings.search_backoff_s == 60
+    assert t1.settings.dry_run is True
+    assert t1.settings.include_tags == {"global_inc"}
+    assert t1.settings.exclude_tags == {"global_exc"}
+    assert t1.settings.min_missing_episodes == 1
+    assert t1.settings.min_missing_percent == 10.0
 
   def test_load_config_with_eligibility_overrides(self) -> None:
     env = {
@@ -235,6 +316,62 @@ class TestLoadConfig:
     env: dict[str, str] = {"GTH_STATE_FILE_PATH": ""}
     with pytest.raises(ValueError, match="At least one"):
       load_config(env)
+
+  def test_load_config_rejects_unrecognized_top_level_gth_var(self) -> None:
+    env = {
+      "GTH_FOO": "bar",
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    with pytest.raises(ValueError, match="Unrecognized GTH_\\* environment variables.*GTH_FOO"):
+      load_config(env)
+
+  def test_load_config_rejects_unrecognized_arr_field(self) -> None:
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+      "GTH_ARR_0_EXTRA_FIELD": "value",
+    }
+    with pytest.raises(
+      ValueError, match="Unrecognized GTH_\\* environment variables.*GTH_ARR_0_EXTRA_FIELD"
+    ):
+      load_config(env)
+
+  def test_load_config_rejects_multiple_unrecognized_gth_vars(self) -> None:
+    env = {
+      "GTH_UNKNOWN": "x",
+      "GTH_ARR_0_TYPO": "radarr",
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    with pytest.raises(ValueError) as exc_info:
+      load_config(env)
+    err_msg = str(exc_info.value)
+    assert "Unrecognized GTH_* environment variables" in err_msg
+    assert "GTH_UNKNOWN" in err_msg
+    assert "GTH_ARR_0_TYPO" in err_msg
+
+  def test_load_config_accepts_valid_gth_vars_only(self) -> None:
+    env = {
+      "GTH_LOG_LEVEL": "debug",
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    config = load_config(env)
+    assert config.log_level == "DEBUG"
+    assert len(config.targets) == 1
 
   def test_load_config_invalid_arr_type_raises(self) -> None:
     env = {

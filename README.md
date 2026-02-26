@@ -39,6 +39,10 @@ For complex setups, use Docker `.env` files or Docker Secrets for API keys.
 
 ## Configuration
 
+Configuration is done by environment variables only. Docker Compose users are welcome to use `.env` files for configuration management, and Docker Secrets to manage sensitive API tokens.
+
+Gatherarr will not start if any unrecognized environment variables beginning with `GTH_` are present. This helps detect typos (e.g. `GTH_ARR_0_TYPO` instead of `GTH_ARR_0_TYPE`) and obsolete configuration.
+
 ### Global configuration
 
 - `GTH_LOG_LEVEL`: (Optional) log verbosity, `debug|info|warn|error`, default `info`.

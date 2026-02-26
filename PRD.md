@@ -10,6 +10,8 @@ with low operational complexity.
 
 - Load all runtime settings from environment variables at startup.
 - Validate config and fail fast with clear errors for missing/invalid values.
+- Reject startup if any unrecognized environment variables starting with `GTH_` are
+  present (e.g. typos like `GTH_ARR_0_TYPO` or obsolete vars).
 - For each configured target instance:
   - authenticate via API key,
   - issue supported search action(s),

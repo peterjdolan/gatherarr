@@ -324,11 +324,20 @@ class Config(BaseSettings):
     return str(path)
 
 
+def _config_env_keys() -> frozenset[str]:
+  """Env var names that Config reads (derived from model fields)."""
+  return frozenset(f"GTH_{name.upper()}" for name in Config.model_fields if name != "targets")
+
+
 def load_config(env: dict[str, str] | None = None) -> Config:
   """Load configuration from environment variables."""
   env_dict = dict(os.environ) if env is None else env
   if env is not None:
     os.environ.update(env)
+
+  # Collect GTH_* keys and mark as used as we parse; fail if any remain unused.
+  unused_gth_keys: set[str] = {k.upper() for k in env_dict if k.upper().startswith("GTH_")}
+  unused_gth_keys -= _config_env_keys()
 
   base_config = Config()
 
@@ -350,6 +359,14 @@ def load_config(env: dict[str, str] | None = None) -> Config:
     apikey_key = f"GTH_ARR_{n}_APIKEY"
     if apikey_key not in env_dict:
       raise ValueError(f"Missing required config: {apikey_key}")
+
+    # Mark target keys as used
+    for key in (type_key, name_key, baseurl_key, apikey_key):
+      unused_gth_keys.discard(key.upper())
+    for env_suffix, _ in _TARGET_OVERRIDE_ENV_MAP:
+      key = f"GTH_ARR_{n}_{env_suffix}"
+      if key in env_dict:
+        unused_gth_keys.discard(key.upper())
 
     try:
       arr_type = ArrType(env_dict[type_key].lower())
@@ -379,6 +396,17 @@ def load_config(env: dict[str, str] | None = None) -> Config:
 
   if not targets:
     raise ValueError("At least one *arr target must be configured (GTH_ARR_0_*)")
+
+  if unused_gth_keys:
+    # Preserve original case from env for error message
+    gth_key_to_original: dict[str, str] = {
+      k.upper(): k for k in env_dict if k.upper().startswith("GTH_")
+    }
+    unrecognized = sorted(gth_key_to_original.get(k, k) for k in unused_gth_keys)
+    raise ValueError(
+      f"Unrecognized GTH_* environment variables: {', '.join(unrecognized)}. "
+      "Check configuration for typos or consult the documentation."
+    )
 
   config = Config()
   config.targets = targets
