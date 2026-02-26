@@ -7,7 +7,8 @@ import httpx
 import pytest
 
 from app.arr_client import ArrClient, HttpClient
-from app.config import ArrTarget, ArrType
+from app.config import ArrTarget, ArrType, TargetSettings
+from app.scheduler import MovieId, SeasonId
 
 
 class FakeHttpClient(HttpClient):
@@ -46,9 +47,11 @@ def radarr_target() -> ArrTarget:
     arr_type=ArrType.RADARR,
     base_url="http://test",
     api_key="key",
-    ops_per_interval=10,
-    interval_s=60,
-    item_revisit_timeout_s=3600,
+    settings=TargetSettings(
+      ops_per_interval=10,
+      interval_s=60,
+      item_revisit_s=3600,
+    ),
   )
 
 
@@ -59,9 +62,11 @@ def sonarr_target() -> ArrTarget:
     arr_type=ArrType.SONARR,
     base_url="http://test",
     api_key="key",
-    ops_per_interval=10,
-    interval_s=60,
-    item_revisit_timeout_s=3600,
+    settings=TargetSettings(
+      ops_per_interval=10,
+      interval_s=60,
+      item_revisit_s=3600,
+    ),
   )
 
 
@@ -98,16 +103,27 @@ class TestArrClient:
     client = ArrClient(target, fake_client)
 
     result = asyncio.run(client.get_seasons({}))
-    assert result == [
-      {"seriesId": 1, "seriesTitle": "Test", "seasonNumber": 1},
-      {"seriesId": 1, "seriesTitle": "Test", "seasonNumber": 2},
-      {"seriesId": 2, "seriesTitle": "Other", "seasonNumber": 0},
-    ]
+    assert len(result) == 3
+    assert result[0]["seriesId"] == 1
+    assert result[0]["seriesTitle"] == "Test"
+    assert result[0]["seasonNumber"] == 1
+    assert result[1]["seriesId"] == 1
+    assert result[1]["seriesTitle"] == "Test"
+    assert result[1]["seasonNumber"] == 2
+    assert result[2]["seriesId"] == 2
+    assert result[2]["seriesTitle"] == "Other"
+    assert result[2]["seasonNumber"] == 0
+    # Check that new fields are present (may be None)
+    for item in result:
+      assert "seriesMonitored" in item
+      assert "seriesTags" in item
+      assert "seriesStatistics" in item
+      assert "seriesFirstAired" in item
+      assert "seasonMonitored" in item
+      assert "seasonStatistics" in item
     assert ("GET", "http://test/api/v3/series") in fake_client.calls
 
   def test_search_movie(self) -> None:
-    from app.scheduler import MovieId
-
     fake_client = FakeHttpClient(responses={"http://test/api/v3/command": {"id": 1}})
     target = radarr_target()
     client = ArrClient(target, fake_client)
@@ -118,8 +134,6 @@ class TestArrClient:
     assert ("POST", "http://test/api/v3/command") in fake_client.calls
 
   def test_search_season(self) -> None:
-    from app.scheduler import SeasonId
-
     fake_client = FakeHttpClient(responses={"http://test/api/v3/command": {"id": 1}})
     target = sonarr_target()
     client = ArrClient(target, fake_client)
@@ -140,9 +154,11 @@ class TestArrClient:
       arr_type=ArrType.RADARR,
       base_url="http://test/",
       api_key="key",
-      ops_per_interval=10,
-      interval_s=60,
-      item_revisit_timeout_s=3600,
+      settings=TargetSettings(
+        ops_per_interval=10,
+        interval_s=60,
+        item_revisit_s=3600,
+      ),
     )
     client = ArrClient(target, fake_client)
 
@@ -156,9 +172,11 @@ class TestArrClient:
       arr_type=ArrType.RADARR,
       base_url="http://test",
       api_key="test-key",
-      ops_per_interval=10,
-      interval_s=60,
-      item_revisit_timeout_s=3600,
+      settings=TargetSettings(
+        ops_per_interval=10,
+        interval_s=60,
+        item_revisit_s=3600,
+      ),
     )
     client = ArrClient(target, fake_client)
     headers = client._get_headers()

@@ -141,7 +141,7 @@ class ArrClient:
     logger.debug("Fetching movies", **get_movies_logging_ids)
     try:
       result = await self._request("GET", url, get_movies_logging_ids)
-      movie_count = len(result) if isinstance(result, list) else 0
+      movie_count = len(result)
       logger.debug("Fetched movies", movie_count=movie_count, **get_movies_logging_ids)
       return cast(list[dict[str, Any]], result)
     except Exception as e:
@@ -162,23 +162,33 @@ class ArrClient:
     for series in series_items:
       series_id = series.get("id")
       season_entries = series.get("seasons")
-      if series_id is None or not isinstance(season_entries, list):
+      if series_id is None or season_entries is None:
         continue
 
       series_name = series.get("title")
+      series_monitored = series.get("monitored")
+      series_tags = series.get("tags")
+      series_statistics = series.get("statistics")
+      series_first_aired = series.get("firstAired")
       for season in season_entries:
-        if not isinstance(season, dict):
-          continue
-
         season_number = season.get("seasonNumber")
         if season_number is None:
           continue
+
+        season_monitored = season.get("monitored")
+        season_statistics = season.get("statistics")
 
         seasons.append(
           {
             "seriesId": series_id,
             "seriesTitle": series_name,
             "seasonNumber": season_number,
+            "seriesMonitored": series_monitored,
+            "seriesTags": series_tags,
+            "seriesStatistics": series_statistics,
+            "seriesFirstAired": series_first_aired,
+            "seasonMonitored": season_monitored,
+            "seasonStatistics": season_statistics,
           }
         )
 

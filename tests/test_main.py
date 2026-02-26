@@ -1,14 +1,13 @@
 """Tests for main module."""
 
+import app.main as main_module
 from app.main import create_web_app, main, setup_logging, start_web_server
 
 
 class TestMainModule:
   def test_can_import_main_module(self) -> None:
     """Test that the main module can be successfully imported."""
-    import app.main
-
-    assert app.main is not None
+    assert main_module is not None
 
   def test_main_function_exists(self) -> None:
     """Test that the main function exists and is callable."""

@@ -26,13 +26,62 @@ with low operational complexity.
 - Recover previous state on restart.
 - Expose Prometheus metrics endpoint (`/metrics`).
 - Emit structured logs to stdout/stderr.
+- Apply configurable search eligibility filters to determine which items should be searched.
+
+## Search Eligibility Requirements
+
+Gatherarr supports configurable filtering criteria to determine which items are eligible for search operations. All eligibility criteria can be configured globally with per-target overrides.
+
+### Eligibility Criteria
+
+- **Monitored Status** (`require_monitored`, default: `true`):
+  - For Radarr: Only search movies that are monitored.
+  - For Sonarr: Only search seasons where both the season and series are monitored (when series monitoring status is available).
+
+- **Quality Cutoff** (`require_cutoff_unmet`, default: `true`):
+  - For Radarr: Only search movies that have not met their quality cutoff (either no file present, or `qualityCutoffNotMet` is true).
+  - For Sonarr: Only search seasons where episode file count is less than total episode count, or quality cutoff has not been met.
+
+- **Release Status** (`released_only`, default: `false`):
+  - For Radarr: Only search movies that have been released (have a file, or any release date - digital, physical, or cinema - has passed).
+  - For Sonarr: Only search seasons that have released episodes (episode file count > 0, or previous airing date has passed, or series first aired date has passed).
+
+- **Tag Filtering** (`include_tags`, `exclude_tags`, default: empty):
+  - `include_tags`: Comma-separated list of tags. Items must have at least one matching tag to be eligible.
+  - `exclude_tags`: Comma-separated list of tags. Items with any matching tag are excluded.
+  - For Radarr: Uses movie tags.
+  - For Sonarr: Uses series tags.
+
+- **Missing Episode Thresholds** (Sonarr only, default: `0`):
+  - `min_missing_episodes`: Minimum number of missing episodes required for a season to be eligible.
+  - `min_missing_percent`: Minimum percentage of missing episodes required (0.0-100.0).
+  - Both thresholds must be satisfied if both are set to non-zero values.
+
+### Search Backoff
+
+- **Search Backoff** (`search_backoff_s`, default: `0`):
+  - When an item search fails, wait at least this many seconds before attempting to search again.
+  - Only applies to items with previous error status.
+  - When set to `0`, no backoff is applied (failed items can be retried immediately if revisit timeout allows).
+
+### Revisit Behavior
+
+- Items that were successfully searched are subject to `item_revisit_s` before being eligible again.
+- Items that failed are subject to `search_backoff_s` (if configured) before being eligible again.
+- Revisit timeout and search backoff are independent and both must be satisfied.
+
+### Dry Run Mode
+
+- **Dry Run** (`dry_run`, default: `false`):
+  - When enabled, eligibility checks are performed and items are marked as eligible in state, but no actual search API calls are made.
+  - Useful for testing eligibility criteria without triggering searches.
 
 ## State Management Requirements
 
 - Keep state minimal:
   - per target: last run timestamp, last success timestamp, last status, consecutive failures,
     last error summary.
-  - per target item: item identifier, last processed timestamp, last result/status.
+  - per target item: item identifier, last processed timestamp, last result/status (SUCCESS, ERROR, or UNKNOWN).
   - global: process start timestamp, total runs.
 - Use atomic write semantics:
   1. write to temp file in the same directory,
@@ -84,7 +133,9 @@ with low operational complexity.
   - scheduler timing logic,
   - retry/backoff behavior,
   - state serialization and atomic write behavior,
-  - metrics emission helpers.
+  - metrics emission helpers,
+  - search eligibility filtering logic (monitored status, cutoff unmet, release status, tag filtering, missing episode thresholds),
+  - search backoff and revisit timeout behavior.
 - Integration tests:
   - fake Radarr/Sonarr interaction scenarios (success, `4xx`, `5xx`, timeout),
   - state recovery from previous file,

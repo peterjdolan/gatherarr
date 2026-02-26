@@ -21,6 +21,14 @@ class RunStatus(StrEnum):
   ERROR = "error"
 
 
+class ItemStatus(StrEnum):
+  """Status of an individual item processing attempt."""
+
+  UNKNOWN = "unknown"
+  SUCCESS = "success"
+  ERROR = "error"
+
+
 @dataclass
 class ItemState:
   """State for a single processed item."""
@@ -28,7 +36,7 @@ class ItemState:
   item_id: str
   last_processed_timestamp: float
   last_result: str
-  last_status: str
+  last_status: ItemStatus
 
   def logging_ids(self) -> dict[str, str]:
     """Logging identifiers for the item."""
@@ -36,7 +44,7 @@ class ItemState:
       "item_id": self.item_id,
       "item_last_processed_timestamp": str(self.last_processed_timestamp),
       "item_last_result": self.last_result,
-      "item_last_status": self.last_status,
+      "item_last_status": self.last_status.value,
     }
 
 
@@ -261,11 +269,17 @@ class StateManager:
 
       items_data = target_data.get("items", {})
       for item_id, item_data in items_data.items():
+        item_status_str = item_data.get("last_status", ItemStatus.UNKNOWN.value)
+        try:
+          item_status = ItemStatus(item_status_str)
+        except ValueError:
+          item_status = ItemStatus.UNKNOWN
+
         target_state.items[item_id] = ItemState(
           item_id=item_data["item_id"],
           last_processed_timestamp=item_data["last_processed_timestamp"],
           last_result=item_data["last_result"],
-          last_status=item_data["last_status"],
+          last_status=item_status,
         )
 
       state.targets[target_name] = target_state
@@ -292,12 +306,16 @@ class StateManager:
   def _serialize(self) -> dict:
     """Serialize state to dictionary using dataclasses.asdict."""
     data = asdict(self.state)
-    # Convert RunStatus enum to string for YAML serialization
-    for target_name, target_data in data.get("targets", {}).items():
+    # Convert enum values to strings for YAML serialization
+    for target_data in data.get("targets", {}).values():
       if "last_status" in target_data:
         status = target_data["last_status"]
         if isinstance(status, RunStatus):
           target_data["last_status"] = status.value
+      for item_data in target_data.get("items", {}).values():
+        item_status = item_data.get("last_status")
+        if isinstance(item_status, ItemStatus):
+          item_data["last_status"] = item_status.value
     return data
 
   def get_target_state(self, target_name: str) -> TargetState:
