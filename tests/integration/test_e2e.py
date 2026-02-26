@@ -257,7 +257,7 @@ def create_target(
     settings=TargetSettings(
       ops_per_interval=ops_per_interval,
       interval_s=60,
-      item_revisit_timeout_s=3600,
+      item_revisit_s=3600,
       require_monitored=overrides.get("require_monitored", True),
       require_cutoff_unmet=overrides.get("require_cutoff_unmet", True),
       **{

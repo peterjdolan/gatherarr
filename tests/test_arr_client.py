@@ -50,7 +50,7 @@ def radarr_target() -> ArrTarget:
     settings=TargetSettings(
       ops_per_interval=10,
       interval_s=60,
-      item_revisit_timeout_s=3600,
+      item_revisit_s=3600,
     ),
   )
 
@@ -65,7 +65,7 @@ def sonarr_target() -> ArrTarget:
     settings=TargetSettings(
       ops_per_interval=10,
       interval_s=60,
-      item_revisit_timeout_s=3600,
+      item_revisit_s=3600,
     ),
   )
 
@@ -157,7 +157,7 @@ class TestArrClient:
       settings=TargetSettings(
         ops_per_interval=10,
         interval_s=60,
-        item_revisit_timeout_s=3600,
+        item_revisit_s=3600,
       ),
     )
     client = ArrClient(target, fake_client)
@@ -175,7 +175,7 @@ class TestArrClient:
       settings=TargetSettings(
         ops_per_interval=10,
         interval_s=60,
-        item_revisit_timeout_s=3600,
+        item_revisit_s=3600,
       ),
     )
     client = ArrClient(target, fake_client)

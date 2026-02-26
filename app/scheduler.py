@@ -339,12 +339,12 @@ class Scheduler:
         time_since_last = time.time() - item_state.last_processed_timestamp
         if (
           item_state.last_status == ItemStatus.SUCCESS
-          and time_since_last < target.settings.item_revisit_timeout_s
+          and time_since_last < target.settings.item_revisit_s
         ):
           logger.debug(
             "Skipping item (revisit timeout not met)",
             time_since_last=time_since_last,
-            revisit_timeout=target.settings.item_revisit_timeout_s,
+            revisit_timeout=target.settings.item_revisit_s,
             **item_logging_ids,
           )
           skips_total.labels(target=target.name, type=target.arr_type.value).inc()

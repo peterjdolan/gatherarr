@@ -61,7 +61,7 @@ Configuration is done by environment variables only. Docker Compose users are we
 - `GTH_ARR_<n>_APIKEY`: (Required) API key for the instance.
 - `GTH_ARR_<n>_OPS_PER_INTERVAL`: (Optional) Override.
 - `GTH_ARR_<n>_INTERVAL_S`: (Optional) Override.
-- `GTH_ARR_<n>_ITEM_REVISIT_TIMEOUT_S`: (Optional) Override.
+- `GTH_ARR_<n>_ITEM_REVISIT_S`: (Optional) Override.
 - `GTH_ARR_<n>_REQUIRE_MONITORED`: (Optional) Override.
 - `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`: (Optional) Override.
 - `GTH_ARR_<n>_RELEASED_ONLY`: (Optional) Override.

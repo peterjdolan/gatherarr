@@ -66,7 +66,7 @@ Gatherarr supports configurable filtering criteria to determine which items are 
 
 ### Revisit Behavior
 
-- Items that were successfully searched are subject to `item_revisit_timeout_s` before being eligible again.
+- Items that were successfully searched are subject to `item_revisit_s` before being eligible again.
 - Items that failed are subject to `search_backoff_s` (if configured) before being eligible again.
 - Revisit timeout and search backoff are independent and both must be satisfied.
 

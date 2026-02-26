@@ -22,7 +22,7 @@ def movie_target(
     settings=TargetSettings(
       ops_per_interval=1,
       interval_s=60,
-      item_revisit_timeout_s=3600,
+      item_revisit_s=3600,
       require_monitored=require_monitored,
       require_cutoff_unmet=require_cutoff_unmet,
       released_only=released_only,
@@ -50,7 +50,7 @@ def season_target(
     settings=TargetSettings(
       ops_per_interval=1,
       interval_s=60,
-      item_revisit_timeout_s=3600,
+      item_revisit_s=3600,
       require_monitored=require_monitored,
       require_cutoff_unmet=require_cutoff_unmet,
       released_only=released_only,

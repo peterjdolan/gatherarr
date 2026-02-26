@@ -52,7 +52,7 @@ class TestLogRedaction:
       settings=TargetSettings(
         ops_per_interval=1,
         interval_s=60,
-        item_revisit_timeout_s=86400,
+        item_revisit_s=86400,
       ),
     )
 

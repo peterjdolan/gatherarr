@@ -259,7 +259,7 @@ class TestArrTarget:
       settings=TargetSettings(
         ops_per_interval=1,
         interval_s=60,
-        item_revisit_timeout_s=3600,
+        item_revisit_s=3600,
       ),
     )
     assert target.name == "test"
@@ -277,7 +277,7 @@ class TestArrTarget:
         settings=TargetSettings(
           ops_per_interval=1,
           interval_s=60,
-          item_revisit_timeout_s=3600,
+          item_revisit_s=3600,
         ),
       )
     assert "base_url must be a valid URL" in str(exc_info.value)
@@ -293,13 +293,13 @@ class TestArrTarget:
         settings=TargetSettings(
           ops_per_interval=1,
           interval_s=60,
-          item_revisit_timeout_s=3600,
+          item_revisit_s=3600,
         ),
       )
     assert "base_url must use http or https scheme" in str(exc_info.value)
 
   @pytest.mark.parametrize(
-    "ops_per_interval,interval_s,item_revisit_timeout_s",
+    "ops_per_interval,interval_s,item_revisit_s",
     [
       (0, 60, 3600),
       (1, 0, 3600),
@@ -307,7 +307,7 @@ class TestArrTarget:
     ],
   )
   def test_arr_target_validates_positive_integers(
-    self, ops_per_interval: int, interval_s: int, item_revisit_timeout_s: int
+    self, ops_per_interval: int, interval_s: int, item_revisit_s: int
   ) -> None:
     """Test that ArrTarget validates positive integer fields."""
     with pytest.raises(ValidationError, match="greater than or equal to 1"):
@@ -319,7 +319,7 @@ class TestArrTarget:
         settings=TargetSettings(
           ops_per_interval=ops_per_interval,
           interval_s=interval_s,
-          item_revisit_timeout_s=item_revisit_timeout_s,
+          item_revisit_s=item_revisit_s,
         ),
       )
 
@@ -335,7 +335,7 @@ class TestArrTarget:
         settings=TargetSettings(
           ops_per_interval=1,
           interval_s=60,
-          item_revisit_timeout_s=3600,
+          item_revisit_s=3600,
           min_missing_percent=min_missing_percent,
         ),
       )
@@ -352,7 +352,7 @@ class TestArrTarget:
         settings=TargetSettings(
           ops_per_interval=1,
           interval_s=60,
-          item_revisit_timeout_s=3600,
+          item_revisit_s=3600,
         ),
       )
     assert "name must be non-empty" in str(exc_info.value)
@@ -369,7 +369,7 @@ class TestArrTarget:
         settings=TargetSettings(
           ops_per_interval=1,
           interval_s=60,
-          item_revisit_timeout_s=3600,
+          item_revisit_s=3600,
         ),
       )
     assert "api_key must be non-empty" in str(exc_info.value)
@@ -384,7 +384,7 @@ class TestArrTarget:
       settings=TargetSettings(
         ops_per_interval=1,
         interval_s=60,
-        item_revisit_timeout_s=3600,
+        item_revisit_s=3600,
       ),
     )
     assert target.base_url == "https://example.com:8989"
@@ -399,7 +399,7 @@ class TestArrTarget:
       settings=TargetSettings(
         ops_per_interval=2,
         interval_s=90,
-        item_revisit_timeout_s=3000,
+        item_revisit_s=3000,
         include_tags={"b", "a"},
         exclude_tags={"z"},
       ),
@@ -530,7 +530,7 @@ class TestLoadConfigValidation:
     [
       ("GTH_ARR_0_OPS_PER_INTERVAL", "0"),
       ("GTH_ARR_0_INTERVAL_S", "-1"),
-      ("GTH_ARR_0_ITEM_REVISIT_TIMEOUT_S", "0"),
+      ("GTH_ARR_0_ITEM_REVISIT_S", "0"),
       ("GTH_ARR_0_SEARCH_BACKOFF_S", "-1"),
     ],
   )

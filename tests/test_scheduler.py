@@ -138,13 +138,13 @@ def create_target(
   settings_kwargs: dict[str, Any] = {
     "ops_per_interval": ops_per_interval,
     "interval_s": 60,
-    "item_revisit_timeout_s": 3600,
+    "item_revisit_s": 3600,
   }
   # Extract settings fields from overrides
   settings_fields = {
     "ops_per_interval",
     "interval_s",
-    "item_revisit_timeout_s",
+    "item_revisit_s",
     "require_monitored",
     "require_cutoff_unmet",
     "released_only",
@@ -306,7 +306,7 @@ class TestScheduler:
     target = create_target(
       "test-backoff",
       ArrType.RADARR,
-      item_revisit_timeout_s=1,
+      item_revisit_s=1,
       search_backoff_s=3600,
     )
     fake_client = FakeClientWithSearchError(target)

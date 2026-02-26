@@ -21,7 +21,7 @@ _OverrideValue = TypeVar("_OverrideValue")
 _TARGET_OVERRIDE_ENV_MAP: tuple[tuple[str, str], ...] = (
   ("OPS_PER_INTERVAL", "ops_per_interval"),
   ("INTERVAL_S", "interval_s"),
-  ("ITEM_REVISIT_TIMEOUT_S", "item_revisit_timeout_s"),
+  ("ITEM_REVISIT_S", "item_revisit_s"),
   ("REQUIRE_MONITORED", "require_monitored"),
   ("REQUIRE_CUTOFF_UNMET", "require_cutoff_unmet"),
   ("RELEASED_ONLY", "released_only"),
@@ -46,7 +46,7 @@ class TargetSettings(BaseModel):
 
   ops_per_interval: int = Field(ge=1)
   interval_s: int = Field(ge=1)
-  item_revisit_timeout_s: int = Field(ge=1)
+  item_revisit_s: int = Field(ge=1)
   require_monitored: bool = True
   require_cutoff_unmet: bool = True
   released_only: bool = False
@@ -125,8 +125,8 @@ def _build_target_settings(base_config: "Config", override_data: dict[str, str])
       override_data.get("ops_per_interval"), base_config.ops_per_interval
     ),
     interval_s=_parse_int_override(override_data.get("interval_s"), base_config.interval_s),
-    item_revisit_timeout_s=_parse_int_override(
-      override_data.get("item_revisit_timeout_s"), base_config.item_revisit_s
+    item_revisit_s=_parse_int_override(
+      override_data.get("item_revisit_s"), base_config.item_revisit_s
     ),
     require_monitored=_parse_bool_override(
       override_data.get("require_monitored"), base_config.require_monitored
@@ -208,7 +208,7 @@ class ArrTarget(BaseModel):
     settings_attrs = [
       ("ops_per_interval", lambda v: v),
       ("interval_s", lambda v: v),
-      ("item_revisit_timeout_s", lambda v: v),
+      ("item_revisit_s", lambda v: v),
       ("require_monitored", lambda v: v),
       ("require_cutoff_unmet", lambda v: v),
       ("released_only", lambda v: v),
