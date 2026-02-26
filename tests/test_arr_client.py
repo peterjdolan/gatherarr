@@ -102,11 +102,24 @@ class TestArrClient:
     client = ArrClient(target, fake_client)
 
     result = asyncio.run(client.get_seasons({}))
-    assert result == [
-      {"seriesId": 1, "seriesTitle": "Test", "seasonNumber": 1},
-      {"seriesId": 1, "seriesTitle": "Test", "seasonNumber": 2},
-      {"seriesId": 2, "seriesTitle": "Other", "seasonNumber": 0},
-    ]
+    assert len(result) == 3
+    assert result[0]["seriesId"] == 1
+    assert result[0]["seriesTitle"] == "Test"
+    assert result[0]["seasonNumber"] == 1
+    assert result[1]["seriesId"] == 1
+    assert result[1]["seriesTitle"] == "Test"
+    assert result[1]["seasonNumber"] == 2
+    assert result[2]["seriesId"] == 2
+    assert result[2]["seriesTitle"] == "Other"
+    assert result[2]["seasonNumber"] == 0
+    # Check that new fields are present (may be None)
+    for item in result:
+      assert "seriesMonitored" in item
+      assert "seriesTags" in item
+      assert "seriesStatistics" in item
+      assert "seriesFirstAired" in item
+      assert "seasonMonitored" in item
+      assert "seasonStatistics" in item
     assert ("GET", "http://test/api/v3/series") in fake_client.calls
 
   def test_search_movie(self) -> None:

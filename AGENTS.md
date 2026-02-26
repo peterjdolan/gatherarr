@@ -59,6 +59,10 @@ This file provides repository-specific instructions for coding agents working in
 - **NO defensive imports** - Do not use `try/except` blocks for imports. Assume all required dependencies are installed and available. If a dependency is optional, it should be documented in project dependencies or configuration, not handled with defensive imports.
 - **All imports at top** - All imports must be at the top of the module. Do not import anything inline within methods or functions.
 
+### API Response Handling
+
+- **NO defensive type checks** - Do not add defensive checks that guard against mistaken assumptions about API response formats. For example, do not check `not isinstance(value, bool)` when expecting an `int` (to defend against Python's bool being a subclass of int). If we have a failing assumption about the API response, we should allow the system to fail with an exception rather than silently handling unexpected types. This makes API contract violations visible and forces us to fix incorrect assumptions rather than masking them.
+
 ### Security
 
 - Do not log secrets (API keys, tokens, or auth headers). If any new sensitive information is introduced, ensure it's redacted by the log redaction utilities in `app/log_redaction.py`

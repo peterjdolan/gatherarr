@@ -32,6 +32,36 @@ def movie_target(
   )
 
 
+def season_target(
+  require_monitored: bool = True,
+  require_cutoff_unmet: bool = True,
+  released_only: bool = False,
+  include_tags: tuple[str, ...] = (),
+  exclude_tags: tuple[str, ...] = (),
+  min_missing_episodes: int = 0,
+  min_missing_percent: float = 0.0,
+) -> ArrTarget:
+  """Create a season handler target with optional overrides."""
+  return ArrTarget(
+    name="season-target",
+    arr_type=ArrType.SONARR,
+    base_url="http://sonarr:8989",
+    api_key="key",
+    settings=TargetSettings(
+      ops_per_interval=1,
+      interval_s=60,
+      item_revisit_timeout_s=3600,
+      require_monitored=require_monitored,
+      require_cutoff_unmet=require_cutoff_unmet,
+      released_only=released_only,
+      include_tags=set(include_tags),
+      exclude_tags=set(exclude_tags),
+      min_missing_episodes=min_missing_episodes,
+      min_missing_percent=min_missing_percent,
+    ),
+  )
+
+
 class TestMovieHandler:
   def test_extract_item_id_with_id(self) -> None:
     """Test extract_item_id returns MovieId when item has id."""
@@ -204,7 +234,7 @@ class TestMovieHandler:
 class TestSeasonHandler:
   def test_extract_item_id_with_id(self) -> None:
     """Test extract_item_id returns SeasonId when item has required fields."""
-    handler = SeasonHandler()
+    handler = SeasonHandler(season_target())
     item = {"seriesId": 123, "seriesTitle": "Test Series", "seasonNumber": 2}
 
     result = handler.extract_item_id(item)
@@ -216,7 +246,7 @@ class TestSeasonHandler:
 
   def test_extract_item_id_without_id(self) -> None:
     """Test extract_item_id returns None when item has missing fields."""
-    handler = SeasonHandler()
+    handler = SeasonHandler(season_target())
     item = {"seriesTitle": "Test Series"}
 
     result = handler.extract_item_id(item)
@@ -225,7 +255,7 @@ class TestSeasonHandler:
 
   def test_extract_logging_id_with_id(self) -> None:
     """Test extract_logging_id returns dict with season correlation fields."""
-    handler = SeasonHandler()
+    handler = SeasonHandler(season_target())
     item = {"seriesId": 123, "seriesTitle": "Test Series", "seasonNumber": 2}
 
     result = handler.extract_logging_id(item)
@@ -236,7 +266,7 @@ class TestSeasonHandler:
 
   def test_extract_logging_id_without_id(self) -> None:
     """Test extract_logging_id handles missing id."""
-    handler = SeasonHandler()
+    handler = SeasonHandler(season_target())
     item = {"seriesTitle": "Test Series"}
 
     result = handler.extract_logging_id(item)

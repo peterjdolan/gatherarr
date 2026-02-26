@@ -76,38 +76,78 @@ def _collect_target_override_data(env_dict: dict[str, str], index: int) -> dict[
   return override_data
 
 
-def _build_target_settings(
-  base_config: "Config", overrides: "TargetOverrideSettings"
-) -> TargetSettings:
+def _parse_int_override(value: str | None, default: int) -> int:
+  """Parse an integer override value."""
+  if value is None:
+    return default
+  try:
+    return int(value)
+  except (ValueError, TypeError) as e:
+    raise ValueError(f"Invalid integer value: {value}") from e
+
+
+def _parse_bool_override(value: str | None, default: bool) -> bool:
+  """Parse a boolean override value."""
+  if value is None:
+    return default
+  lower = value.lower().strip()
+  if lower in ("true", "1", "yes", "on"):
+    return True
+  if lower in ("false", "0", "no", "off"):
+    return False
+  raise ValueError(f"Invalid boolean value: {value}")
+
+
+def _parse_float_override(value: str | None, default: float) -> float:
+  """Parse a float override value."""
+  if value is None:
+    return default
+  try:
+    return float(value)
+  except (ValueError, TypeError) as e:
+    raise ValueError(f"Invalid float value: {value}") from e
+
+
+def _build_target_settings(base_config: "Config", override_data: dict[str, str]) -> TargetSettings:
   """Build resolved target settings from defaults and per-target overrides."""
-  include_tags_raw = _resolve_override_value(overrides.include_tags, base_config.include_tags)
-  exclude_tags_raw = _resolve_override_value(overrides.exclude_tags, base_config.exclude_tags)
+  include_tags_raw = (
+    override_data.get("include_tags")
+    if "include_tags" in override_data
+    else base_config.include_tags
+  )
+  exclude_tags_raw = (
+    override_data.get("exclude_tags")
+    if "exclude_tags" in override_data
+    else base_config.exclude_tags
+  )
   return TargetSettings(
-    ops_per_interval=_resolve_override_value(
-      overrides.ops_per_interval, base_config.ops_per_interval
+    ops_per_interval=_parse_int_override(
+      override_data.get("ops_per_interval"), base_config.ops_per_interval
     ),
-    interval_s=_resolve_override_value(overrides.interval_s, base_config.interval_s),
-    item_revisit_timeout_s=_resolve_override_value(
-      overrides.item_revisit_timeout_s, base_config.item_revisit_s
+    interval_s=_parse_int_override(override_data.get("interval_s"), base_config.interval_s),
+    item_revisit_timeout_s=_parse_int_override(
+      override_data.get("item_revisit_timeout_s"), base_config.item_revisit_s
     ),
-    require_monitored=_resolve_override_value(
-      overrides.require_monitored, base_config.require_monitored
+    require_monitored=_parse_bool_override(
+      override_data.get("require_monitored"), base_config.require_monitored
     ),
-    require_cutoff_unmet=_resolve_override_value(
-      overrides.require_cutoff_unmet, base_config.require_cutoff_unmet
+    require_cutoff_unmet=_parse_bool_override(
+      override_data.get("require_cutoff_unmet"), base_config.require_cutoff_unmet
     ),
-    released_only=_resolve_override_value(overrides.released_only, base_config.released_only),
-    search_backoff_s=_resolve_override_value(
-      overrides.search_backoff_s, base_config.search_backoff_s
+    released_only=_parse_bool_override(
+      override_data.get("released_only"), base_config.released_only
     ),
-    dry_run=_resolve_override_value(overrides.dry_run, base_config.dry_run),
+    search_backoff_s=_parse_int_override(
+      override_data.get("search_backoff_s"), base_config.search_backoff_s
+    ),
+    dry_run=_parse_bool_override(override_data.get("dry_run"), base_config.dry_run),
     include_tags=coerce_tag_set(include_tags_raw),
     exclude_tags=coerce_tag_set(exclude_tags_raw),
-    min_missing_episodes=_resolve_override_value(
-      overrides.min_missing_episodes, base_config.min_missing_episodes
+    min_missing_episodes=_parse_int_override(
+      override_data.get("min_missing_episodes"), base_config.min_missing_episodes
     ),
-    min_missing_percent=_resolve_override_value(
-      overrides.min_missing_percent, base_config.min_missing_percent
+    min_missing_percent=_parse_float_override(
+      override_data.get("min_missing_percent"), base_config.min_missing_percent
     ),
   )
 
@@ -183,33 +223,6 @@ class ArrTarget(BaseModel):
     for attr, transformer in settings_attrs:
       tags[attr] = transformer(getattr(self.settings, attr))
     return tags
-
-
-class TargetOverrideSettings(BaseSettings):
-  """Temporary settings for parsing target-specific overrides."""
-
-  model_config = SettingsConfigDict(case_sensitive=False, extra="ignore")
-
-  ops_per_interval: int | None = Field(default=None, ge=1)
-  interval_s: int | None = Field(default=None, ge=1)
-  item_revisit_timeout_s: int | None = Field(default=None, ge=1)
-  require_monitored: bool | None = None
-  require_cutoff_unmet: bool | None = None
-  released_only: bool | None = None
-  search_backoff_s: int | None = Field(default=None, ge=0)
-  dry_run: bool | None = None
-  include_tags: set[str] | None = None
-  exclude_tags: set[str] | None = None
-  min_missing_episodes: int | None = Field(default=None, ge=0)
-  min_missing_percent: float | None = Field(default=None, ge=0.0, le=100.0)
-
-  @field_validator("include_tags", "exclude_tags", mode="before")
-  @classmethod
-  def normalize_optional_tags(cls, v: object) -> set[str] | None:
-    """Normalize include/exclude tags to sets when overrides are present."""
-    if v is None:
-      return None
-    return coerce_tag_set(v)
 
 
 class Config(BaseSettings):
@@ -347,13 +360,7 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       ) from e
 
     override_data = _collect_target_override_data(env_dict, n)
-
-    overrides = (
-      TargetOverrideSettings.model_validate(override_data)
-      if override_data
-      else TargetOverrideSettings()
-    )
-    resolved_settings = _build_target_settings(base_config, overrides)
+    resolved_settings = _build_target_settings(base_config, override_data)
 
     target = ArrTarget(
       name=env_dict[name_key],

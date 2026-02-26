@@ -11,7 +11,6 @@ from app.config import (
   ArrTarget,
   ArrType,
   Config,
-  TargetOverrideSettings,
   TargetSettings,
   load_config,
 )
@@ -511,66 +510,6 @@ class TestConfigValidation:
       state_path = Path(tmpdir) / "state.yaml"
       config = Config(item_revisit_s=86400, state_file_path=str(state_path))
       assert config.item_revisit_s == 86400
-
-
-class TestTargetOverrideSettings:
-  @pytest.mark.parametrize("invalid_value", [0, -1])
-  def test_target_override_validates_ops_per_interval_positive(self, invalid_value: int) -> None:
-    """Test that TargetOverrideSettings validates ops_per_interval is positive."""
-    with pytest.raises(ValidationError):
-      TargetOverrideSettings(ops_per_interval=invalid_value)
-
-  def test_target_override_validates_ops_per_interval_valid(self) -> None:
-    """Test that TargetOverrideSettings accepts valid ops_per_interval."""
-    settings = TargetOverrideSettings(ops_per_interval=10)
-    assert settings.ops_per_interval == 10
-
-  @pytest.mark.parametrize("invalid_value", [0, -1])
-  def test_target_override_validates_interval_s_positive(self, invalid_value: int) -> None:
-    """Test that TargetOverrideSettings validates interval_s is positive."""
-    with pytest.raises(ValidationError):
-      TargetOverrideSettings(interval_s=invalid_value)
-
-  def test_target_override_validates_interval_s_valid(self) -> None:
-    """Test that TargetOverrideSettings accepts valid interval_s."""
-    settings = TargetOverrideSettings(interval_s=300)
-    assert settings.interval_s == 300
-
-  @pytest.mark.parametrize("invalid_value", [0, -1])
-  def test_target_override_validates_item_revisit_timeout_s_positive(
-    self, invalid_value: int
-  ) -> None:
-    """Test that TargetOverrideSettings validates item_revisit_timeout_s is positive."""
-    with pytest.raises(ValidationError):
-      TargetOverrideSettings(item_revisit_timeout_s=invalid_value)
-
-  def test_target_override_validates_item_revisit_timeout_s_valid(self) -> None:
-    """Test that TargetOverrideSettings accepts valid item_revisit_timeout_s."""
-    settings = TargetOverrideSettings(item_revisit_timeout_s=7200)
-    assert settings.item_revisit_timeout_s == 7200
-
-  def test_target_override_allows_none(self) -> None:
-    """Test that TargetOverrideSettings allows None values."""
-    settings = TargetOverrideSettings()
-    assert settings.ops_per_interval is None
-    assert settings.interval_s is None
-    assert settings.item_revisit_timeout_s is None
-    assert settings.include_tags is None
-    assert settings.exclude_tags is None
-
-  def test_target_override_parses_csv_tags_to_sets(self) -> None:
-    """Test that TargetOverrideSettings parses CSV tags into sets."""
-    settings = TargetOverrideSettings.model_validate(
-      {"include_tags": "a, b, a", "exclude_tags": "skip"}
-    )
-    assert settings.include_tags == {"a", "b"}
-    assert settings.exclude_tags == {"skip"}
-
-  @pytest.mark.parametrize("invalid_value", [-1.0, 101.0])
-  def test_target_override_validates_min_missing_percent_range(self, invalid_value: float) -> None:
-    """Test that TargetOverrideSettings validates min_missing_percent range."""
-    with pytest.raises(ValidationError):
-      TargetOverrideSettings(min_missing_percent=invalid_value)
 
 
 class TestLoadConfigValidation:

@@ -36,7 +36,19 @@ class FakeArrClient:
 
   async def get_seasons(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_seasons_called = True
-    return [{"seriesId": 1, "seriesTitle": "Series 1", "seasonNumber": 1}]
+    return [
+      {
+        "seriesId": 1,
+        "seriesTitle": "Series 1",
+        "seasonNumber": 1,
+        "seriesMonitored": True,
+        "seasonMonitored": True,
+        "seriesTags": [],
+        "seriesStatistics": {"qualityCutoffNotMet": True},
+        "seriesFirstAired": None,
+        "seasonStatistics": {"episodeFileCount": 0, "totalEpisodeCount": 10},
+      }
+    ]
 
   async def search_movie(self, movie_id: Any, logging_ids: dict[str, Any]) -> dict:
     self.search_movie_called = True
@@ -74,6 +86,22 @@ class FakeClientWithIneligibleItems(FakeArrClient):
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_movies_called = True
     return [{"id": 1, "title": "Movie 1", "monitored": False, "hasFile": False}]
+
+  async def get_seasons(self, logging_ids: dict[str, Any]) -> list[dict]:
+    self.get_seasons_called = True
+    return [
+      {
+        "seriesId": 1,
+        "seriesTitle": "Series 1",
+        "seasonNumber": 1,
+        "seriesMonitored": False,
+        "seasonMonitored": False,
+        "seriesTags": [],
+        "seriesStatistics": {"qualityCutoffNotMet": True},
+        "seriesFirstAired": None,
+        "seasonStatistics": {"episodeFileCount": 10, "totalEpisodeCount": 10},
+      }
+    ]
 
 
 class FakeClientWithSingleEligibleMovie(FakeArrClient):
@@ -249,9 +277,9 @@ class TestScheduler:
 
   @pytest.mark.asyncio
   async def test_run_once_searches_seasons(self, state_manager: StateManager) -> None:
-    """Test that seasons are searched when fetched."""
+    """Test that eligible seasons are searched when fetched."""
     target = create_target("test-sonarr", ArrType.SONARR)
-    fake_client = FakeClientWithIneligibleItems(target)
+    fake_client = FakeArrClient(target)
     scheduler = create_scheduler(target, state_manager, fake_client)
 
     await scheduler.run_once(target)

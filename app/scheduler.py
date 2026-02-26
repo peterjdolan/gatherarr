@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Protocol
 
 import structlog
+from dateutil import parser as dateutil_parser
 
 from app.action_logging import Action, log_movie_action, log_season_action
 from app.arr_client import ArrClient
@@ -28,7 +29,7 @@ logger = structlog.get_logger()
 
 
 def _parse_utc_datetime(value: Any) -> datetime | None:
-  """Parse an ISO date/time string into a timezone-aware UTC datetime."""
+  """Parse a date/time string into a timezone-aware UTC datetime."""
   if not isinstance(value, str):
     return None
 
@@ -36,10 +37,9 @@ def _parse_utc_datetime(value: Any) -> datetime | None:
   if not normalized:
     return None
 
-  iso_input = f"{normalized[:-1]}+00:00" if normalized.endswith("Z") else normalized
   try:
-    parsed = datetime.fromisoformat(iso_input)
-  except ValueError:
+    parsed = dateutil_parser.parse(normalized)
+  except ValueError, TypeError:
     return None
 
   if parsed.tzinfo is None:
@@ -190,7 +190,7 @@ class Scheduler:
         handler = MovieHandler(target)
       elif target.arr_type == ArrType.SONARR:
         items = await client.get_seasons(combined_logging_ids)
-        handler = SeasonHandler()
+        handler = SeasonHandler(target)
       else:
         raise ValueError(f"Unsupported target type: {target.arr_type}")
 
@@ -495,16 +495,12 @@ class MovieHandler:
   def _is_cutoff_unmet(self, item: dict[str, Any]) -> bool:
     """Determine whether Radarr quality cutoff has not been reached."""
     movie_file = item.get("movieFile")
-    if isinstance(movie_file, dict):
+    if movie_file is not None:
       quality_cutoff_not_met = movie_file.get("qualityCutoffNotMet")
-      if isinstance(quality_cutoff_not_met, bool):
-        return quality_cutoff_not_met
+      return quality_cutoff_not_met is True
 
     has_file = item.get("hasFile")
-    if isinstance(has_file, bool):
-      return not has_file
-
-    return False
+    return has_file is False
 
   def _is_released(self, item: dict[str, Any]) -> bool:
     """Determine whether a movie has reached release availability."""
@@ -569,6 +565,9 @@ class MovieHandler:
 class SeasonHandler:
   """Handler for processing individual seasons."""
 
+  def __init__(self, target: ArrTarget) -> None:
+    self.target = target
+
   def extract_item_id(self, item: dict[str, Any]) -> SeasonId | None:
     """Extract season ID for state tracking."""
     series_id = item.get("seriesId")
@@ -592,8 +591,151 @@ class SeasonHandler:
     }
 
   def should_search(self, item: dict[str, Any]) -> bool:
-    """Return True when season should be searched."""
+    """Return True when season satisfies configured eligibility rules."""
+    # Check series-level monitored status
+    if self.target.settings.require_monitored:
+      series_monitored = item.get("seriesMonitored")
+      season_monitored = item.get("seasonMonitored")
+      # Season must be monitored, and if series monitoring is available, series should be monitored too
+      if season_monitored is not True:
+        return False
+      if series_monitored is not None and series_monitored is not True:
+        return False
+
+    # Check cutoff unmet status
+    if self.target.settings.require_cutoff_unmet and not self._is_cutoff_unmet(item):
+      return False
+
+    # Check tag filters (using series tags)
+    series_tags = item.get("seriesTags")
+    if not tag_filter(
+      extract_item_tags({"tags": series_tags}),
+      self.target.settings.include_tags,
+      self.target.settings.exclude_tags,
+    ):
+      return False
+
+    # Check released status
+    if self.target.settings.released_only and not self._is_released(item):
+      return False
+
+    # Check missing episode thresholds
+    if not self._meets_missing_thresholds(item):
+      return False
+
     return True
+
+  def _is_cutoff_unmet(self, item: dict[str, Any]) -> bool:
+    """Determine whether season quality cutoff has not been reached."""
+    season_statistics = item.get("seasonStatistics")
+    if season_statistics is not None:
+      episode_file_count = season_statistics.get("episodeFileCount")
+      episode_count = season_statistics.get("episodeCount")
+      total_episode_count = season_statistics.get("totalEpisodeCount")
+      if episode_file_count is not None and total_episode_count is not None:
+        return bool(episode_file_count < total_episode_count)
+      if episode_file_count is not None and episode_count is not None:
+        return bool(episode_file_count < episode_count)
+
+      percent_of_episodes = season_statistics.get("percentOfEpisodes")
+      if percent_of_episodes is not None:
+        return float(percent_of_episodes) < 100.0
+
+    # Fallback to series-level statistics if season statistics unavailable
+    series_statistics = item.get("seriesStatistics")
+    if series_statistics is not None:
+      quality_cutoff_not_met = series_statistics.get("qualityCutoffNotMet")
+      return quality_cutoff_not_met is True
+
+    return False
+
+  def _is_released(self, item: dict[str, Any]) -> bool:
+    """Determine whether a season has released episodes."""
+    season_statistics = item.get("seasonStatistics")
+    if season_statistics is not None:
+      episode_file_count = season_statistics.get("episodeFileCount")
+      if episode_file_count is not None:
+        return bool(episode_file_count > 0)
+
+      previous_airing = season_statistics.get("previousAiring")
+      if previous_airing is not None:
+        now = datetime.now(timezone.utc)
+        airing_dt = _parse_utc_datetime(previous_airing)
+        if airing_dt is not None and airing_dt <= now:
+          return True
+
+    # Fallback to series first aired
+    series_first_aired = item.get("seriesFirstAired")
+    if series_first_aired is not None:
+      now = datetime.now(timezone.utc)
+      first_aired = _parse_utc_datetime(series_first_aired)
+      if first_aired is not None and first_aired <= now:
+        return True
+
+    return False
+
+  def _meets_missing_thresholds(self, item: dict[str, Any]) -> bool:
+    """Validate configured season missing-episode thresholds."""
+    if (
+      self.target.settings.min_missing_episodes <= 0
+      and self.target.settings.min_missing_percent <= 0
+    ):
+      return True
+
+    season_statistics = item.get("seasonStatistics")
+    if season_statistics is None:
+      return False
+
+    missing_episode_count = self._missing_episode_count(season_statistics)
+    if self.target.settings.min_missing_episodes > 0:
+      if missing_episode_count is None:
+        return False
+      if missing_episode_count < self.target.settings.min_missing_episodes:
+        return False
+
+    missing_percent = self._missing_percent(season_statistics, missing_episode_count)
+    if self.target.settings.min_missing_percent > 0:
+      if missing_percent is None:
+        return False
+      if missing_percent < self.target.settings.min_missing_percent:
+        return False
+
+    return True
+
+  def _missing_episode_count(self, statistics: dict[str, Any]) -> int | None:
+    """Calculate missing episodes from season statistics counters."""
+    episode_file_count = statistics.get("episodeFileCount")
+    total_episode_count = statistics.get("totalEpisodeCount")
+    if episode_file_count is not None and total_episode_count is not None:
+      return int(max(total_episode_count - episode_file_count, 0))
+
+    episode_count = statistics.get("episodeCount")
+    if episode_file_count is not None and episode_count is not None:
+      return int(max(episode_count - episode_file_count, 0))
+
+    return None
+
+  def _missing_percent(
+    self, statistics: dict[str, Any], missing_episode_count: int | None
+  ) -> float | None:
+    """Calculate missing percent from season statistics counters."""
+    percent_of_episodes = statistics.get("percentOfEpisodes")
+    if percent_of_episodes is not None:
+      return max(100.0 - float(percent_of_episodes), 0.0)
+
+    total_episode_count = statistics.get("totalEpisodeCount")
+    if (
+      missing_episode_count is not None
+      and total_episode_count is not None
+      and total_episode_count > 0
+    ):
+      return float((missing_episode_count / total_episode_count) * 100.0)
+
+    episode_count = statistics.get("episodeCount")
+    if missing_episode_count is not None and episode_count is not None and episode_count > 0:
+      return float((missing_episode_count / episode_count) * 100.0)
+
+    return None
 
   async def search(
     self,
