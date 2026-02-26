@@ -6,7 +6,7 @@ Huntarrs are great, but when you need a calm, reliable, and simple helper, you n
 
 - **Goal:** Simple, reliable, observable background searches for *arr apps.
 - **Deployment model:** Docker container only.
-- **Configuration model:** Environment variables only. `.env` files and Docker Secrets may be used to manage configuration and API keys.
+- **Configuration model:** Environment variables only.
 - **Security model:** No sensitive information written to disk or emitted in logs. No outgoing network requests except to the configured *arr servers. No telemetry or monitoring.
 
 ## Minimal Deployment with Docker Compose
@@ -27,11 +27,9 @@ services:
       GTH_ARR_1_APIKEY: FAKE_SONARR_API_KEY_REPLACE_ME
 ```
 
-To manage more complex configurations, Docker `.env` files may be used. To securely handle sensitive API keys, Docker Secrets may be used.
+For complex setups, use Docker `.env` files or Docker Secrets for API keys.
 
 ## Configuration
-
-Configuration is done by environment variables only. Docker Compose users are welcome to use `.env` files for configuration management, and Docker Secrets to manage sensitive API tokens.
 
 ### Global configuration
 
@@ -85,7 +83,6 @@ Configuration is done by environment variables only. Docker Compose users are we
 ### Non-Goals
 
 - No manual interaction.
-- No telemetry.
 
 ### MVP
 
@@ -113,16 +110,7 @@ Attach to the included devcontainer, and run
 uv sync
 ```
 
-### Verifying a change
+### Verifying changes
 
-After incremental changes..
-
-```bash
-uv run poe check
-```
-
-Before submitting a PR..
-
-```bash
-uv run poe check-e2e
-```
+- Incremental: `uv run poe check`
+- Before PR: `uv run poe check-e2e`
