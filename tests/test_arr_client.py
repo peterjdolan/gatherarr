@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.arr_client import ArrClient, HttpClient
-from app.config import ArrTarget, ArrType
+from app.config import ArrTarget, ArrType, TargetSettings
 
 
 class FakeHttpClient(HttpClient):
@@ -44,9 +44,11 @@ def radarr_target() -> ArrTarget:
     arr_type=ArrType.RADARR,
     base_url="http://test",
     api_key="key",
-    ops_per_interval=10,
-    interval_s=60,
-    item_revisit_timeout_s=3600,
+    settings=TargetSettings(
+      ops_per_interval=10,
+      interval_s=60,
+      item_revisit_timeout_s=3600,
+    ),
   )
 
 
@@ -57,9 +59,11 @@ def sonarr_target() -> ArrTarget:
     arr_type=ArrType.SONARR,
     base_url="http://test",
     api_key="key",
-    ops_per_interval=10,
-    interval_s=60,
-    item_revisit_timeout_s=3600,
+    settings=TargetSettings(
+      ops_per_interval=10,
+      interval_s=60,
+      item_revisit_timeout_s=3600,
+    ),
   )
 
 
@@ -123,9 +127,11 @@ class TestArrClient:
       arr_type=ArrType.RADARR,
       base_url="http://test/",
       api_key="key",
-      ops_per_interval=10,
-      interval_s=60,
-      item_revisit_timeout_s=3600,
+      settings=TargetSettings(
+        ops_per_interval=10,
+        interval_s=60,
+        item_revisit_timeout_s=3600,
+      ),
     )
     client = ArrClient(target, fake_client)
 
@@ -139,9 +145,11 @@ class TestArrClient:
       arr_type=ArrType.RADARR,
       base_url="http://test",
       api_key="test-key",
-      ops_per_interval=10,
-      interval_s=60,
-      item_revisit_timeout_s=3600,
+      settings=TargetSettings(
+        ops_per_interval=10,
+        interval_s=60,
+        item_revisit_timeout_s=3600,
+      ),
     )
     client = ArrClient(target, fake_client)
     headers = client._get_headers()

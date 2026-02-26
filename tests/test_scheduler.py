@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from app.config import ArrTarget, ArrType
+from app.config import ArrTarget, ArrType, TargetSettings
 from app.scheduler import Scheduler
 from app.state import InMemoryStateStorage, ItemState, ItemStatus, RunStatus, StateManager
 
@@ -115,14 +115,36 @@ def create_target(
   **overrides: Any,
 ) -> ArrTarget:
   """Create an ArrTarget with common default values."""
+  settings_kwargs: dict[str, Any] = {
+    "ops_per_interval": ops_per_interval,
+    "interval_s": 60,
+    "item_revisit_timeout_s": 3600,
+  }
+  # Extract settings fields from overrides
+  settings_fields = {
+    "ops_per_interval",
+    "interval_s",
+    "item_revisit_timeout_s",
+    "require_monitored",
+    "require_cutoff_unmet",
+    "released_only",
+    "search_backoff_s",
+    "dry_run",
+    "include_tags",
+    "exclude_tags",
+    "min_missing_episodes",
+    "min_missing_percent",
+  }
+  for field in settings_fields:
+    if field in overrides:
+      settings_kwargs[field] = overrides.pop(field)
+  
   target_kwargs: dict[str, Any] = {
     "name": name,
     "arr_type": arr_type,
     "base_url": "http://test",
     "api_key": "key",
-    "ops_per_interval": ops_per_interval,
-    "interval_s": 60,
-    "item_revisit_timeout_s": 3600,
+    "settings": TargetSettings(**settings_kwargs),
   }
   target_kwargs.update(overrides)
   return ArrTarget(**target_kwargs)

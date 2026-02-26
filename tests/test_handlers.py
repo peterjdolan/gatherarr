@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from app.config import ArrTarget, ArrType
+from app.config import ArrTarget, ArrType, TargetSettings
 from app.scheduler import MovieHandler, MovieId, SeriesHandler, SeriesId
 
 
@@ -19,14 +19,16 @@ def movie_target(
     arr_type=ArrType.RADARR,
     base_url="http://radarr:7878",
     api_key="key",
-    ops_per_interval=1,
-    interval_s=60,
-    item_revisit_timeout_s=3600,
-    require_monitored=require_monitored,
-    require_cutoff_unmet=require_cutoff_unmet,
-    released_only=released_only,
-    include_tags=set(include_tags),
-    exclude_tags=set(exclude_tags),
+    settings=TargetSettings(
+      ops_per_interval=1,
+      interval_s=60,
+      item_revisit_timeout_s=3600,
+      require_monitored=require_monitored,
+      require_cutoff_unmet=require_cutoff_unmet,
+      released_only=released_only,
+      include_tags=set(include_tags),
+      exclude_tags=set(exclude_tags),
+    ),
   )
 
 
@@ -45,16 +47,18 @@ def series_target(
     arr_type=ArrType.SONARR,
     base_url="http://sonarr:8989",
     api_key="key",
-    ops_per_interval=1,
-    interval_s=60,
-    item_revisit_timeout_s=3600,
-    require_monitored=require_monitored,
-    require_cutoff_unmet=require_cutoff_unmet,
-    released_only=released_only,
-    include_tags=set(include_tags),
-    exclude_tags=set(exclude_tags),
-    min_missing_episodes=min_missing_episodes,
-    min_missing_percent=min_missing_percent,
+    settings=TargetSettings(
+      ops_per_interval=1,
+      interval_s=60,
+      item_revisit_timeout_s=3600,
+      require_monitored=require_monitored,
+      require_cutoff_unmet=require_cutoff_unmet,
+      released_only=released_only,
+      include_tags=set(include_tags),
+      exclude_tags=set(exclude_tags),
+      min_missing_episodes=min_missing_episodes,
+      min_missing_percent=min_missing_percent,
+    ),
   )
 
 

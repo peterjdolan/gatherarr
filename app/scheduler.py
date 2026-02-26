@@ -261,7 +261,7 @@ class Scheduler:
       tasks = []
       for target in self.config_targets:
         target_state = self.state_manager.get_target_state(target.name)
-        if time.time() - target_state.last_run_timestamp >= target.interval_s:
+        if time.time() - target_state.last_run_timestamp >= target.settings.interval_s:
           tasks.append(self.run_once(target))
 
       if tasks:
@@ -304,7 +304,7 @@ class Scheduler:
     )
 
     for item in items:
-      if ops_count >= target.ops_per_interval:
+      if ops_count >= target.settings.ops_per_interval:
         logger.debug(
           "Reached ops_per_interval limit",
           ops_count=ops_count,
@@ -332,22 +332,22 @@ class Scheduler:
         time_since_last = time.time() - item_state.last_processed_timestamp
         if (
           item_state.last_status == ItemStatus.SUCCESS
-          and time_since_last < target.item_revisit_timeout_s
+          and time_since_last < target.settings.item_revisit_timeout_s
         ):
           logger.debug(
             "Skipping item (revisit timeout not met)",
             time_since_last=time_since_last,
-            revisit_timeout=target.item_revisit_timeout_s,
+            revisit_timeout=target.settings.item_revisit_timeout_s,
             **item_logging_ids,
           )
           skips_total.labels(target=target.name, type=target.arr_type.value).inc()
           continue
-        if item_state.last_status != ItemStatus.SUCCESS and target.search_backoff_s > 0:
-          if time_since_last < target.search_backoff_s:
+        if item_state.last_status != ItemStatus.SUCCESS and target.settings.search_backoff_s > 0:
+          if time_since_last < target.settings.search_backoff_s:
             logger.debug(
               "Skipping item (search backoff not met)",
               time_since_last=time_since_last,
-              search_backoff_s=target.search_backoff_s,
+              search_backoff_s=target.settings.search_backoff_s,
               **item_logging_ids,
             )
             skips_total.labels(target=target.name, type=target.arr_type.value).inc()
@@ -361,7 +361,7 @@ class Scheduler:
         skips_total.labels(target=target.name, type=target.arr_type.value).inc()
         continue
 
-      if target.dry_run:
+      if target.settings.dry_run:
         dry_run_timestamp = time.time()
         if item_state is None:
           dry_run_state = ItemState(
@@ -476,17 +476,17 @@ class MovieHandler:
 
   def should_search(self, item: dict[str, Any]) -> bool:
     """Return True when movie satisfies configured eligibility rules."""
-    if self.target.require_monitored and item.get("monitored") is not True:
+    if self.target.settings.require_monitored and item.get("monitored") is not True:
       return False
-    if self.target.require_cutoff_unmet and not self._is_cutoff_unmet(item):
+    if self.target.settings.require_cutoff_unmet and not self._is_cutoff_unmet(item):
       return False
     if not tag_filter(
       extract_item_tags(item),
-      self.target.include_tags,
-      self.target.exclude_tags,
+      self.target.settings.include_tags,
+      self.target.settings.exclude_tags,
     ):
       return False
-    if self.target.released_only and not self._is_released(item):
+    if self.target.settings.released_only and not self._is_released(item):
       return False
     return True
 
@@ -577,17 +577,17 @@ class SeriesHandler:
 
   def should_search(self, item: dict[str, Any]) -> bool:
     """Return True when series satisfies configured eligibility rules."""
-    if self.target.require_monitored and item.get("monitored") is not True:
+    if self.target.settings.require_monitored and item.get("monitored") is not True:
       return False
-    if self.target.require_cutoff_unmet and not self._is_cutoff_unmet(item):
+    if self.target.settings.require_cutoff_unmet and not self._is_cutoff_unmet(item):
       return False
     if not tag_filter(
       extract_item_tags(item),
-      self.target.include_tags,
-      self.target.exclude_tags,
+      self.target.settings.include_tags,
+      self.target.settings.exclude_tags,
     ):
       return False
-    if self.target.released_only and not self._is_released(item):
+    if self.target.settings.released_only and not self._is_released(item):
       return False
     if not self._meets_missing_thresholds(item):
       return False
@@ -638,7 +638,7 @@ class SeriesHandler:
 
   def _meets_missing_thresholds(self, item: dict[str, Any]) -> bool:
     """Validate configured series missing-episode thresholds."""
-    if self.target.min_missing_episodes <= 0 and self.target.min_missing_percent <= 0:
+    if self.target.settings.min_missing_episodes <= 0 and self.target.settings.min_missing_percent <= 0:
       return True
 
     statistics = item.get("statistics")
@@ -646,17 +646,17 @@ class SeriesHandler:
       return False
 
     missing_episode_count = self._missing_episode_count(statistics)
-    if self.target.min_missing_episodes > 0:
+    if self.target.settings.min_missing_episodes > 0:
       if missing_episode_count is None:
         return False
-      if missing_episode_count < self.target.min_missing_episodes:
+      if missing_episode_count < self.target.settings.min_missing_episodes:
         return False
 
     missing_percent = self._missing_percent(statistics, missing_episode_count)
-    if self.target.min_missing_percent > 0:
+    if self.target.settings.min_missing_percent > 0:
       if missing_percent is None:
         return False
-      if missing_percent < self.target.min_missing_percent:
+      if missing_percent < self.target.settings.min_missing_percent:
         return False
 
     return True

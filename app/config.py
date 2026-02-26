@@ -4,7 +4,6 @@ import ipaddress
 import logging
 import os
 import re
-from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeVar
@@ -13,6 +12,7 @@ from urllib.parse import urlparse
 import structlog
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from app.tag_utils import coerce_tag_set
 
 logger = structlog.get_logger()
@@ -41,39 +41,27 @@ def _resolve_override_value(
   return default_value if override_value is None else override_value
 
 
-@dataclass(frozen=True)
-class ResolvedTargetSettings:
+class TargetSettings(BaseModel):
   """Resolved settings for target-level behavior."""
 
-  ops_per_interval: int
-  interval_s: int
-  item_revisit_timeout_s: int
-  require_monitored: bool
-  require_cutoff_unmet: bool
-  released_only: bool
-  search_backoff_s: int
-  dry_run: bool
-  include_tags: set[str]
-  exclude_tags: set[str]
-  min_missing_episodes: int
-  min_missing_percent: float
+  ops_per_interval: int = Field(ge=1)
+  interval_s: int = Field(ge=1)
+  item_revisit_timeout_s: int = Field(ge=1)
+  require_monitored: bool = True
+  require_cutoff_unmet: bool = True
+  released_only: bool = False
+  search_backoff_s: int = Field(default=0, ge=0)
+  dry_run: bool = False
+  include_tags: set[str] = Field(default_factory=set)
+  exclude_tags: set[str] = Field(default_factory=set)
+  min_missing_episodes: int = Field(default=0, ge=0)
+  min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
 
-  def to_dict(self) -> dict[str, Any]:
-    """Serialize resolved settings for ArrTarget construction."""
-    return {
-      "ops_per_interval": self.ops_per_interval,
-      "interval_s": self.interval_s,
-      "item_revisit_timeout_s": self.item_revisit_timeout_s,
-      "require_monitored": self.require_monitored,
-      "require_cutoff_unmet": self.require_cutoff_unmet,
-      "released_only": self.released_only,
-      "search_backoff_s": self.search_backoff_s,
-      "dry_run": self.dry_run,
-      "include_tags": self.include_tags,
-      "exclude_tags": self.exclude_tags,
-      "min_missing_episodes": self.min_missing_episodes,
-      "min_missing_percent": self.min_missing_percent,
-    }
+  @field_validator("include_tags", "exclude_tags", mode="before")
+  @classmethod
+  def normalize_tags(cls, v: object) -> set[str]:
+    """Normalize include/exclude tags from CSV or iterable values."""
+    return coerce_tag_set(v)
 
 
 def _collect_target_override_data(env_dict: dict[str, str], index: int) -> dict[str, str]:
@@ -90,11 +78,11 @@ def _collect_target_override_data(env_dict: dict[str, str], index: int) -> dict[
 
 def _build_target_settings(
   base_config: "Config", overrides: "TargetOverrideSettings"
-) -> ResolvedTargetSettings:
+) -> TargetSettings:
   """Build resolved target settings from defaults and per-target overrides."""
   include_tags_raw = _resolve_override_value(overrides.include_tags, base_config.include_tags)
   exclude_tags_raw = _resolve_override_value(overrides.exclude_tags, base_config.exclude_tags)
-  return ResolvedTargetSettings(
+  return TargetSettings(
     ops_per_interval=_resolve_override_value(
       overrides.ops_per_interval, base_config.ops_per_interval
     ),
@@ -138,18 +126,7 @@ class ArrTarget(BaseModel):
   arr_type: ArrType
   base_url: str
   api_key: str
-  ops_per_interval: int = Field(ge=1)
-  interval_s: int = Field(ge=1)
-  item_revisit_timeout_s: int = Field(ge=1)
-  require_monitored: bool = True
-  require_cutoff_unmet: bool = True
-  released_only: bool = False
-  search_backoff_s: int = Field(default=0, ge=0)
-  dry_run: bool = False
-  include_tags: set[str] = Field(default_factory=set)
-  exclude_tags: set[str] = Field(default_factory=set)
-  min_missing_episodes: int = Field(default=0, ge=0)
-  min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+  settings: TargetSettings
   _logging_ids: dict[str, str] | None = None
 
   @field_validator("name")
@@ -179,12 +156,6 @@ class ArrTarget(BaseModel):
       raise ValueError(f"base_url must use http or https scheme, got: {parsed.scheme}")
     return v
 
-  @field_validator("include_tags", "exclude_tags", mode="before")
-  @classmethod
-  def normalize_tags(cls, v: object) -> set[str]:
-    """Normalize include/exclude tags from CSV or iterable values."""
-    return coerce_tag_set(v)
-
   def logging_ids(self) -> dict[str, str]:
     """Return logging identifiers for the target."""
     if self._logging_ids is None:
@@ -193,9 +164,24 @@ class ArrTarget(BaseModel):
 
   def config_logging_tags(self) -> dict[str, Any]:
     """Return target configuration values suitable for logging."""
-    tags = self.model_dump(mode="json", exclude={"api_key"})
-    tags["include_tags"] = sorted(self.include_tags)
-    tags["exclude_tags"] = sorted(self.exclude_tags)
+    tags = self.model_dump(mode="json", exclude={"api_key", "settings"})
+    settings_attrs = [
+      ("ops_per_interval", lambda v: v),
+      ("interval_s", lambda v: v),
+      ("item_revisit_timeout_s", lambda v: v),
+      ("require_monitored", lambda v: v),
+      ("require_cutoff_unmet", lambda v: v),
+      ("released_only", lambda v: v),
+      ("search_backoff_s", lambda v: v),
+      ("dry_run", lambda v: v),
+      ("include_tags", lambda v: sorted(v)),
+      ("exclude_tags", lambda v: sorted(v)),
+      ("min_missing_episodes", lambda v: v),
+      ("min_missing_percent", lambda v: v),
+    ]
+
+    for attr, transformer in settings_attrs:
+      tags[attr] = transformer(getattr(self.settings, attr))
     return tags
 
 
@@ -374,7 +360,7 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       arr_type=arr_type,
       base_url=env_dict[baseurl_key],
       api_key=env_dict[apikey_key],
-      **resolved_settings.to_dict(),
+      settings=resolved_settings,
     )
     logger.debug(
       "Target configuration created",

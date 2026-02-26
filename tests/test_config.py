@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.config import ArrTarget, ArrType, Config, TargetOverrideSettings, load_config
+from app.config import ArrTarget, ArrType, Config, TargetOverrideSettings, TargetSettings, load_config
 
 
 class TestLogLevelParsing:
@@ -174,15 +174,15 @@ class TestLoadConfig:
     }
     config = load_config(env)
     target = config.targets[0]
-    assert target.require_monitored is True
-    assert target.require_cutoff_unmet is True
-    assert target.released_only is False
-    assert target.search_backoff_s == 300
-    assert target.dry_run is False
-    assert target.include_tags == {"anime", "4k"}
-    assert target.exclude_tags == {"paused"}
-    assert target.min_missing_episodes == 3
-    assert target.min_missing_percent == 20.5
+    assert target.settings.require_monitored is True
+    assert target.settings.require_cutoff_unmet is True
+    assert target.settings.released_only is False
+    assert target.settings.search_backoff_s == 300
+    assert target.settings.dry_run is False
+    assert target.settings.include_tags == {"anime", "4k"}
+    assert target.settings.exclude_tags == {"paused"}
+    assert target.settings.min_missing_episodes == 3
+    assert target.settings.min_missing_percent == 20.5
 
   def test_load_config_uses_global_tag_sets_without_target_override(self) -> None:
     """Use global include/exclude tags when target overrides are not provided."""
@@ -197,8 +197,8 @@ class TestLoadConfig:
     }
     config = load_config(env)
     target = config.targets[0]
-    assert target.include_tags == {"global_tag", "another"}
-    assert target.exclude_tags == {"skip_tag"}
+    assert target.settings.include_tags == {"global_tag", "another"}
+    assert target.settings.exclude_tags == {"skip_tag"}
 
   def test_load_multiple_targets(self) -> None:
     env = {
@@ -250,9 +250,11 @@ class TestArrTarget:
       arr_type=ArrType.RADARR,
       base_url="http://localhost:7878",
       api_key="test-key",
-      ops_per_interval=1,
-      interval_s=60,
-      item_revisit_timeout_s=3600,
+      settings=TargetSettings(
+        ops_per_interval=1,
+        interval_s=60,
+        item_revisit_timeout_s=3600,
+      ),
     )
     assert target.name == "test"
     assert target.arr_type == ArrType.RADARR
@@ -266,9 +268,11 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="invalid-url",
         api_key="test-key",
-        ops_per_interval=1,
-        interval_s=60,
-        item_revisit_timeout_s=3600,
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_timeout_s=3600,
+        ),
       )
     assert "base_url must be a valid URL" in str(exc_info.value)
 
@@ -280,9 +284,11 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="ftp://localhost:7878",
         api_key="test-key",
-        ops_per_interval=1,
-        interval_s=60,
-        item_revisit_timeout_s=3600,
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_timeout_s=3600,
+        ),
       )
     assert "base_url must use http or https scheme" in str(exc_info.value)
 
@@ -304,9 +310,11 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="http://localhost:7878",
         api_key="test-key",
-        ops_per_interval=ops_per_interval,
-        interval_s=interval_s,
-        item_revisit_timeout_s=item_revisit_timeout_s,
+        settings=TargetSettings(
+          ops_per_interval=ops_per_interval,
+          interval_s=interval_s,
+          item_revisit_timeout_s=item_revisit_timeout_s,
+        ),
       )
 
   @pytest.mark.parametrize("min_missing_percent", [-1.0, 101.0])
@@ -318,10 +326,12 @@ class TestArrTarget:
         arr_type=ArrType.SONARR,
         base_url="http://localhost:8989",
         api_key="test-key",
-        ops_per_interval=1,
-        interval_s=60,
-        item_revisit_timeout_s=3600,
-        min_missing_percent=min_missing_percent,
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_timeout_s=3600,
+          min_missing_percent=min_missing_percent,
+        ),
       )
 
   @pytest.mark.parametrize("name", ["", "   "])
@@ -333,9 +343,11 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="http://localhost:7878",
         api_key="test-key",
-        ops_per_interval=1,
-        interval_s=60,
-        item_revisit_timeout_s=3600,
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_timeout_s=3600,
+        ),
       )
     assert "name must be non-empty" in str(exc_info.value)
 
@@ -348,9 +360,11 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="http://localhost:7878",
         api_key=api_key,
-        ops_per_interval=1,
-        interval_s=60,
-        item_revisit_timeout_s=3600,
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_timeout_s=3600,
+        ),
       )
     assert "api_key must be non-empty" in str(exc_info.value)
 
@@ -361,7 +375,8 @@ class TestArrTarget:
       arr_type=ArrType.SONARR,
       base_url="https://example.com:8989",
       api_key="test-key",
-      ops_per_interval=1,
+      settings=TargetSettings(
+        ops_per_interval=1,
       interval_s=60,
       item_revisit_timeout_s=3600,
     )
@@ -374,11 +389,13 @@ class TestArrTarget:
       arr_type=ArrType.RADARR,
       base_url="http://localhost:7878",
       api_key="secret",
-      ops_per_interval=2,
-      interval_s=90,
-      item_revisit_timeout_s=3000,
-      include_tags={"b", "a"},
-      exclude_tags={"z"},
+      settings=TargetSettings(
+        ops_per_interval=2,
+        interval_s=90,
+        item_revisit_timeout_s=3000,
+        include_tags={"b", "a"},
+        exclude_tags={"z"},
+      ),
     )
     logging_tags = target.config_logging_tags()
     assert "api_key" not in logging_tags
