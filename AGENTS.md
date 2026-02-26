@@ -106,3 +106,10 @@ Before suggesting code changes are complete:
 - Use the smallest high-signal test set for touched code; avoid running unrelated large suites.
 - For non-trivial changes, run at minimum `uv run poe check` to verify code formatting, type safety, and the unit test suite.
 - Run `uv run poe check-e2e` for broad or cross-cutting changes.
+
+### Environment caveats
+
+- The correct app entrypoint is `uv run python -m app.main` (not `uv run python -m app`; the package has no `__main__.py`).
+- Running the app locally requires `GTH_ARR_<n>_*` env vars and a writable state directory. Use `GTH_STATE_FILE_PATH=/tmp/gatherarr-data/state.yaml` (after `mkdir -p /tmp/gatherarr-data`) to avoid the default `/data/state.yaml` which requires a Docker volume.
+- The Cloud VM ships with Rust/Cargo 1.83 which is too old to build `rpds-py`. The update script handles this by prepending the `rustup stable` toolchain to `PATH`. If builds fail with `edition2024` errors, run `rustup update stable`.
+- No external services (Radarr, Sonarr, Docker, Prometheus) are needed for dev/test. All tests use in-process fakes and OpenAPI contract validation.
