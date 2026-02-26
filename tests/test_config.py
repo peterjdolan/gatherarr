@@ -7,7 +7,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.config import ArrTarget, ArrType, Config, TargetOverrideSettings, load_config
+from app.config import (
+  ArrTarget,
+  ArrType,
+  Config,
+  TargetSettings,
+  load_config,
+)
 
 
 class TestLogLevelParsing:
@@ -106,6 +112,15 @@ class TestLoadConfig:
     assert config.targets[0].arr_type == ArrType.RADARR
     assert config.targets[0].base_url == "http://localhost:7878"
     assert config.targets[0].api_key == "test-key"
+    assert config.targets[0].settings.require_monitored is True
+    assert config.targets[0].settings.require_cutoff_unmet is True
+    assert config.targets[0].settings.released_only is False
+    assert config.targets[0].settings.search_backoff_s == 0
+    assert config.targets[0].settings.dry_run is False
+    assert config.targets[0].settings.include_tags == set()
+    assert config.targets[0].settings.exclude_tags == set()
+    assert config.targets[0].settings.min_missing_episodes == 0
+    assert config.targets[0].settings.min_missing_percent == 0.0
     assert config.log_level == "INFO"
     assert config.metrics_enabled is True
     assert config.metrics_port == 9090
@@ -134,8 +149,62 @@ class TestLoadConfig:
       assert config.state_file_path == str(state_path)
       assert config.ops_per_interval == 5
       assert config.interval_s == 120
-      assert config.targets[0].ops_per_interval == 10
-      assert config.targets[0].interval_s == 300
+      assert config.targets[0].settings.ops_per_interval == 10
+      assert config.targets[0].settings.interval_s == 300
+
+  def test_load_config_with_eligibility_overrides(self) -> None:
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_REQUIRE_MONITORED": "false",
+      "GTH_REQUIRE_CUTOFF_UNMET": "false",
+      "GTH_RELEASED_ONLY": "true",
+      "GTH_SEARCH_BACKOFF_S": "120",
+      "GTH_DRY_RUN": "true",
+      "GTH_INCLUDE_TAGS": "global_tag",
+      "GTH_EXCLUDE_TAGS": "global_block",
+      "GTH_MIN_MISSING_EPISODES": "1",
+      "GTH_MIN_MISSING_PERCENT": "5.0",
+      "GTH_ARR_0_TYPE": "sonarr",
+      "GTH_ARR_0_NAME": "sonarr1",
+      "GTH_ARR_0_BASEURL": "http://sonarr:8989",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_0_REQUIRE_MONITORED": "true",
+      "GTH_ARR_0_REQUIRE_CUTOFF_UNMET": "true",
+      "GTH_ARR_0_RELEASED_ONLY": "false",
+      "GTH_ARR_0_SEARCH_BACKOFF_S": "300",
+      "GTH_ARR_0_DRY_RUN": "false",
+      "GTH_ARR_0_INCLUDE_TAGS": "anime, 4k, anime",
+      "GTH_ARR_0_EXCLUDE_TAGS": "paused",
+      "GTH_ARR_0_MIN_MISSING_EPISODES": "3",
+      "GTH_ARR_0_MIN_MISSING_PERCENT": "20.5",
+    }
+    config = load_config(env)
+    target = config.targets[0]
+    assert target.settings.require_monitored is True
+    assert target.settings.require_cutoff_unmet is True
+    assert target.settings.released_only is False
+    assert target.settings.search_backoff_s == 300
+    assert target.settings.dry_run is False
+    assert target.settings.include_tags == {"anime", "4k"}
+    assert target.settings.exclude_tags == {"paused"}
+    assert target.settings.min_missing_episodes == 3
+    assert target.settings.min_missing_percent == 20.5
+
+  def test_load_config_uses_global_tag_sets_without_target_override(self) -> None:
+    """Use global include/exclude tags when target overrides are not provided."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_INCLUDE_TAGS": "global_tag, another",
+      "GTH_EXCLUDE_TAGS": "skip_tag",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+    }
+    config = load_config(env)
+    target = config.targets[0]
+    assert target.settings.include_tags == {"global_tag", "another"}
+    assert target.settings.exclude_tags == {"skip_tag"}
 
   def test_load_multiple_targets(self) -> None:
     env = {
@@ -243,9 +312,11 @@ class TestArrTarget:
       arr_type=ArrType.RADARR,
       base_url="http://localhost:7878",
       api_key="test-key",
-      ops_per_interval=1,
-      interval_s=60,
-      item_revisit_timeout_s=3600,
+      settings=TargetSettings(
+        ops_per_interval=1,
+        interval_s=60,
+        item_revisit_s=3600,
+      ),
     )
     assert target.name == "test"
     assert target.arr_type == ArrType.RADARR
@@ -259,9 +330,11 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="invalid-url",
         api_key="test-key",
-        ops_per_interval=1,
-        interval_s=60,
-        item_revisit_timeout_s=3600,
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_s=3600,
+        ),
       )
     assert "base_url must be a valid URL" in str(exc_info.value)
 
@@ -273,14 +346,16 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="ftp://localhost:7878",
         api_key="test-key",
-        ops_per_interval=1,
-        interval_s=60,
-        item_revisit_timeout_s=3600,
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_s=3600,
+        ),
       )
     assert "base_url must use http or https scheme" in str(exc_info.value)
 
   @pytest.mark.parametrize(
-    "ops_per_interval,interval_s,item_revisit_timeout_s",
+    "ops_per_interval,interval_s,item_revisit_s",
     [
       (0, 60, 3600),
       (1, 0, 3600),
@@ -288,7 +363,7 @@ class TestArrTarget:
     ],
   )
   def test_arr_target_validates_positive_integers(
-    self, ops_per_interval: int, interval_s: int, item_revisit_timeout_s: int
+    self, ops_per_interval: int, interval_s: int, item_revisit_s: int
   ) -> None:
     """Test that ArrTarget validates positive integer fields."""
     with pytest.raises(ValidationError, match="greater than or equal to 1"):
@@ -297,9 +372,28 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="http://localhost:7878",
         api_key="test-key",
-        ops_per_interval=ops_per_interval,
-        interval_s=interval_s,
-        item_revisit_timeout_s=item_revisit_timeout_s,
+        settings=TargetSettings(
+          ops_per_interval=ops_per_interval,
+          interval_s=interval_s,
+          item_revisit_s=item_revisit_s,
+        ),
+      )
+
+  @pytest.mark.parametrize("min_missing_percent", [-1.0, 101.0])
+  def test_arr_target_validates_missing_percent_range(self, min_missing_percent: float) -> None:
+    """Test that ArrTarget validates min_missing_percent between 0 and 100."""
+    with pytest.raises(ValidationError):
+      ArrTarget(
+        name="test",
+        arr_type=ArrType.SONARR,
+        base_url="http://localhost:8989",
+        api_key="test-key",
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_s=3600,
+          min_missing_percent=min_missing_percent,
+        ),
       )
 
   @pytest.mark.parametrize("name", ["", "   "])
@@ -311,9 +405,11 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="http://localhost:7878",
         api_key="test-key",
-        ops_per_interval=1,
-        interval_s=60,
-        item_revisit_timeout_s=3600,
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_s=3600,
+        ),
       )
     assert "name must be non-empty" in str(exc_info.value)
 
@@ -326,9 +422,11 @@ class TestArrTarget:
         arr_type=ArrType.RADARR,
         base_url="http://localhost:7878",
         api_key=api_key,
-        ops_per_interval=1,
-        interval_s=60,
-        item_revisit_timeout_s=3600,
+        settings=TargetSettings(
+          ops_per_interval=1,
+          interval_s=60,
+          item_revisit_s=3600,
+        ),
       )
     assert "api_key must be non-empty" in str(exc_info.value)
 
@@ -339,11 +437,33 @@ class TestArrTarget:
       arr_type=ArrType.SONARR,
       base_url="https://example.com:8989",
       api_key="test-key",
-      ops_per_interval=1,
-      interval_s=60,
-      item_revisit_timeout_s=3600,
+      settings=TargetSettings(
+        ops_per_interval=1,
+        interval_s=60,
+        item_revisit_s=3600,
+      ),
     )
     assert target.base_url == "https://example.com:8989"
+
+  def test_arr_target_config_logging_tags(self) -> None:
+    """Test config logging tags omit API key and normalize tags."""
+    target = ArrTarget(
+      name="test",
+      arr_type=ArrType.RADARR,
+      base_url="http://localhost:7878",
+      api_key="secret",
+      settings=TargetSettings(
+        ops_per_interval=2,
+        interval_s=90,
+        item_revisit_s=3000,
+        include_tags={"b", "a"},
+        exclude_tags={"z"},
+      ),
+    )
+    logging_tags = target.config_logging_tags()
+    assert "api_key" not in logging_tags
+    assert logging_tags["include_tags"] == ["a", "b"]
+    assert logging_tags["exclude_tags"] == ["z"]
 
 
 class TestConfigValidation:
@@ -448,50 +568,6 @@ class TestConfigValidation:
       assert config.item_revisit_s == 86400
 
 
-class TestTargetOverrideSettings:
-  @pytest.mark.parametrize("invalid_value", [0, -1])
-  def test_target_override_validates_ops_per_interval_positive(self, invalid_value: int) -> None:
-    """Test that TargetOverrideSettings validates ops_per_interval is positive."""
-    with pytest.raises(ValidationError):
-      TargetOverrideSettings(ops_per_interval=invalid_value)
-
-  def test_target_override_validates_ops_per_interval_valid(self) -> None:
-    """Test that TargetOverrideSettings accepts valid ops_per_interval."""
-    settings = TargetOverrideSettings(ops_per_interval=10)
-    assert settings.ops_per_interval == 10
-
-  @pytest.mark.parametrize("invalid_value", [0, -1])
-  def test_target_override_validates_interval_s_positive(self, invalid_value: int) -> None:
-    """Test that TargetOverrideSettings validates interval_s is positive."""
-    with pytest.raises(ValidationError):
-      TargetOverrideSettings(interval_s=invalid_value)
-
-  def test_target_override_validates_interval_s_valid(self) -> None:
-    """Test that TargetOverrideSettings accepts valid interval_s."""
-    settings = TargetOverrideSettings(interval_s=300)
-    assert settings.interval_s == 300
-
-  @pytest.mark.parametrize("invalid_value", [0, -1])
-  def test_target_override_validates_item_revisit_timeout_s_positive(
-    self, invalid_value: int
-  ) -> None:
-    """Test that TargetOverrideSettings validates item_revisit_timeout_s is positive."""
-    with pytest.raises(ValidationError):
-      TargetOverrideSettings(item_revisit_timeout_s=invalid_value)
-
-  def test_target_override_validates_item_revisit_timeout_s_valid(self) -> None:
-    """Test that TargetOverrideSettings accepts valid item_revisit_timeout_s."""
-    settings = TargetOverrideSettings(item_revisit_timeout_s=7200)
-    assert settings.item_revisit_timeout_s == 7200
-
-  def test_target_override_allows_none(self) -> None:
-    """Test that TargetOverrideSettings allows None values."""
-    settings = TargetOverrideSettings()
-    assert settings.ops_per_interval is None
-    assert settings.interval_s is None
-    assert settings.item_revisit_timeout_s is None
-
-
 class TestLoadConfigValidation:
   def test_load_config_validates_arr_target_url(self) -> None:
     """Test that load_config validates ArrTarget URLs."""
@@ -510,7 +586,8 @@ class TestLoadConfigValidation:
     [
       ("GTH_ARR_0_OPS_PER_INTERVAL", "0"),
       ("GTH_ARR_0_INTERVAL_S", "-1"),
-      ("GTH_ARR_0_ITEM_REVISIT_TIMEOUT_S", "0"),
+      ("GTH_ARR_0_ITEM_REVISIT_S", "0"),
+      ("GTH_ARR_0_SEARCH_BACKOFF_S", "-1"),
     ],
   )
   def test_load_config_validates_arr_target_positive_integers(
@@ -524,6 +601,19 @@ class TestLoadConfigValidation:
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
       "GTH_ARR_0_APIKEY": "test-key",
       env_key: env_value,
+    }
+    with pytest.raises(ValidationError):
+      load_config(env)
+
+  def test_load_config_validates_min_missing_percent_range(self) -> None:
+    """Test that load_config validates min_missing_percent range."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "sonarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:8989",
+      "GTH_ARR_0_APIKEY": "test-key",
+      "GTH_ARR_0_MIN_MISSING_PERCENT": "101.0",
     }
     with pytest.raises(ValidationError):
       load_config(env)

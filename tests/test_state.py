@@ -9,6 +9,7 @@ from app.state import (
   FileStateStorage,
   InMemoryStateStorage,
   ItemState,
+  ItemStatus,
   RunStatus,
   StateManager,
   TargetState,
@@ -35,7 +36,7 @@ class TestStateManagerSerialization:
         item_id="123",
         last_processed_timestamp=500.0,
         last_result="search_triggered",
-        last_status="success",
+        last_status=ItemStatus.SUCCESS,
       )
       target_state.items["123"] = item_state
 
@@ -62,6 +63,7 @@ class TestStateManagerSerialization:
       assert loaded_target.last_status == RunStatus.SUCCESS
       assert "123" in loaded_target.items
       assert loaded_target.items["123"].item_id == "123"
+      assert loaded_target.items["123"].last_status == ItemStatus.SUCCESS
 
   def test_load_nonexistent_file(self) -> None:
     """Test loading when file doesn't exist."""
@@ -168,7 +170,7 @@ class TestStateManager:
       item_id="123",
       last_processed_timestamp=500.0,
       last_result="search_triggered",
-      last_status="success",
+      last_status=ItemStatus.SUCCESS,
     )
     target_state.items["123"] = item_state
 

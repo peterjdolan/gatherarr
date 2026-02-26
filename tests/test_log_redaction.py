@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from app.config import ArrTarget, ArrType
+from app.config import ArrTarget, ArrType, TargetSettings
 from app.log_redaction import REDACTED_VALUE, redact_sensitive_fields
 
 
@@ -49,9 +49,11 @@ class TestLogRedaction:
       arr_type=ArrType.RADARR,
       base_url="http://radarr:7878",
       api_key="model-secret",
-      ops_per_interval=1,
-      interval_s=60,
-      item_revisit_timeout_s=86400,
+      settings=TargetSettings(
+        ops_per_interval=1,
+        interval_s=60,
+        item_revisit_s=86400,
+      ),
     )
 
     redacted = redact_sensitive_fields(
