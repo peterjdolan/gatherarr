@@ -6,6 +6,10 @@ Gatherarr is a small, worker-style daemon that periodically triggers search-rela
 supported `*arr` services. It is intended for self-hosted users who want predictable automation
 with low operational complexity.
 
+### Compatibility Policy
+
+Gatherarr does not offer backwards-compatibility guarantees for configuration until v1.0. Configuration variable names, formats, and behavior may change between releases without migration support. Users should expect to update their configuration when upgrading.
+
 ## Functional Requirements
 
 - Load all runtime settings from environment variables at startup.
@@ -62,7 +66,7 @@ Gatherarr supports configurable filtering criteria to determine which items are 
 
 ### Search Backoff (Failed-Search Retry)
 
-See **Retry Configuration** for full failed-search retry parameters. Items with previous error status are subject to the configured retry backoff before being eligible again. Legacy `search_backoff_s` is superseded by the new parameters when both are present.
+See **Retry Configuration** for full failed-search retry parameters. Items with previous error status are subject to the configured retry backoff before being eligible again.
 
 ### Revisit Behavior
 
@@ -93,20 +97,20 @@ Applied when an HTTP request to a *arr API fails with a retryable error (network
 
 Applied when an item's search fails; determines how long to wait before retrying that item on a subsequent run:
 
-- **Search max retries** (`search_retry_max_attempts`): Maximum retry attempts for a failed item (`0` = retry indefinitely). Default: `0`.
+- **Search max retries** (`search_retry_max_attempts`): Maximum retry attempts for a failed item (`0` = retry indefinitely). Default: `5`.
 - **Search initial retry delay** (`search_retry_initial_delay_s`): Initial delay in seconds before first retry. Default: `60`.
 - **Search retry backoff exponent** (`search_retry_backoff_exponent`): Multiplier for exponential backoff. Default: `2.0`.
 - **Search retry max delay** (`search_retry_max_delay_s`): Cap on delay between retries in seconds. Default: `86400` (24 hours).
 
-When both `search_backoff_s` (legacy) and the new failed-search retry parameters are present, the new parameters take precedence.
-
 ## State Management Requirements
 
+- State is persisted to a single YAML file. No other state storage format is supported.
 - Keep state minimal:
   - per target: last run timestamp, last success timestamp, last status, consecutive failures,
     last error summary.
   - per target item: item identifier, last processed timestamp, last result/status (SUCCESS, ERROR, or UNKNOWN).
   - global: process start timestamp, total runs.
+- State size is capped at 10 MB. When the state file would exceed this limit, prune the oldest item state entries (oldest `last_processed_timestamp` first) until the size is within the cap. This ensures bounded storage and predictable behavior.
 - Use atomic write semantics:
   1. write to temp file in the same directory,
   2. fsync temp file,
@@ -116,7 +120,6 @@ When both `search_backoff_s` (legacy) and the new failed-search retry parameters
   - log parsing error,
   - move file aside as `.corrupt.<timestamp>`,
   - continue with fresh state.
-- Optional state pruning: support configurable retention to drop item state entries that have not been processed within a threshold (e.g. `state_prune_days`) to prevent unbounded growth.
 
 ## Observability Requirements
 
@@ -165,7 +168,7 @@ When both `search_backoff_s` (legacy) and the new failed-search retry parameters
   - scheduler timing logic,
   - HTTP retry/backoff behavior,
   - failed-search retry/backoff behavior,
-  - state serialization and atomic write behavior,
+  - state serialization, atomic write behavior, and size-cap pruning,
   - metrics emission helpers,
   - search eligibility filtering logic (monitored status, cutoff unmet, release status, tag filtering, missing episode thresholds),
   - search backoff and revisit timeout behavior.
@@ -184,11 +187,12 @@ When both `search_backoff_s` (legacy) and the new failed-search retry parameters
 
 - Build and publish a single Docker image.
 - Read configuration only from environment variables.
-- Require persistent mount for state file path.
+- Require persistent mount for the state file path. The state file is YAML format.
 - Expose a health endpoint (`/health`) that returns `"OK"` only when:
   - liveness is satisfied (process is running), and
   - readiness is satisfied (configuration is valid and scheduler is initialized).
 - The health endpoint MUST always be available and served, regardless of whether the metrics endpoint is enabled. When metrics are disabled, a minimal HTTP server still runs to serve `/health`.
+- The health and metrics endpoints MUST be bound to the same listen address and port. Configuration uses general parameters (`listen_address`, `listen_port`) rather than metrics-specific names, since the HTTP server hosts both endpoints.
 
 ## Milestones
 
@@ -200,14 +204,21 @@ When both `search_backoff_s` (legacy) and the new failed-search retry parameters
 
 - **Retry configuration**
   - HTTP retries: configurable `http_max_retries`, `http_retry_initial_delay_s`, `http_retry_backoff_exponent`, `http_retry_max_delay_s` (global and per-target).
-  - Failed-search retries: configurable `search_retry_max_attempts`, `search_retry_initial_delay_s`, `search_retry_backoff_exponent`, `search_retry_max_delay_s` (global and per-target). Supersedes legacy `search_backoff_s` when both are present.
+  - Failed-search retries: configurable `search_retry_max_attempts`, `search_retry_initial_delay_s`, `search_retry_backoff_exponent`, `search_retry_max_delay_s` (global and per-target).
 - **HTTP timeout:** Configurable `http_timeout_s` for all external HTTP calls.
 - **Graceful shutdown:** Configurable `shutdown_timeout_s`; finish in-flight work or stop within timeout.
 - **Startup banner:** Emit an easily readable copy of the full configuration (global and per-target) at startup so users can verify per-target configuration. Exclude API keys.
-- **Health always live:** Serve `/health` even when metrics are disabled; run a minimal HTTP server for health regardless of `GTH_METRICS_ENABLED`.
+- **Health always live:** Serve `/health` even when metrics are disabled; run a minimal HTTP server for health regardless of `GTH_METRICS_ENABLED`. Rename `metrics_address`/`metrics_port` to `listen_address`/`listen_port` (`GTH_LISTEN_ADDRESS`, `GTH_LISTEN_PORT`) to reflect that the server hosts both health and metrics endpoints.
 - **Config validation:** On startup failure, output a concise summary of all validation issues (missing vars, invalid values). Reject duplicate target names.
 - **Log redaction:** Expand sensitive-key redaction to cover `Authorization`, `Cookie`, bearer tokens, and similar.
-- **State pruning (optional):** Support configurable `state_prune_days` to drop stale item state entries.
+- **State size cap:** Cap state file at 10 MB; prune oldest item state entries when the limit would be exceeded.
+
+**Architectural changes (readability, robustness, testability, security):**
+
+- **Scheduler module split:** Extract `MovieHandler` and `SeasonHandler` from the scheduler into dedicated handler modules (`app/handlers/`) to reduce file size and improve readability.
+- **ItemHandler protocol documentation:** Document the ItemHandler contract (extract_item_id, extract_logging_id, should_search, search) in the PRD to support consistent Fake implementations and future extensibility (e.g. Lidarr in v0.2).
+- **HTTP base URL validation:** At config load, warn or fail when a target `base_url` uses `http://` instead of `https://`, since API keys are transmitted in cleartext over HTTP.
+- **Configuration schema documentation:** Document the full environment variable schema (names, types, defaults, per-target overrides) in README or a dedicated config reference so the source of truth is explicit and testable.
 
 ### v0.2 (Future)
 

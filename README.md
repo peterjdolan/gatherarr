@@ -17,6 +17,14 @@ Huntarrs are great, but when you need a calm, reliable, and simple helper, you n
 - **Configuration model:** Environment variables only.
 - **Security model:** No sensitive information written to disk or emitted in logs. No outgoing network requests except to the configured *arr servers. No telemetry or monitoring.
 
+For full product requirements, architecture, and planned features, see [PRD.md](PRD.md).
+
+## Roadmap
+
+- **v0.1 (coming soon):** Retry configuration (HTTP and failed-search), configurable HTTP timeout and graceful shutdown, startup banner with full config display, health endpoint always served (independent of metrics), config validation summary, expanded log redaction, state size cap (10 MB), and architectural improvements (scheduler split, ItemHandler protocol, HTTP base URL validation).
+- **v0.2:** Lidarr and Whisparr support.
+- **v1.0:** Backwards compatibility for configuration. Until v1.0, configuration variable names and behavior may change between releases.
+
 ## Minimal Deployment with Docker Compose
 
 ```yaml
@@ -103,7 +111,7 @@ When `GTH_METRICS_ENABLED` is `true`, Gatherarr exposes a Prometheus-compatible 
 
 - Trigger Radarr and Sonarr searches on a configurable schedule.
 - Support one or more Radarr/Sonarr instances.
-- Persist minimal operational state to a single JSON or YAML file, and gracefully recover when state is reset or corrupted.
+- Persist minimal operational state to a single YAML file, and gracefully recover when state is reset or corrupted.
 - Expose Prometheus-compatible metrics endpoint.
 - Function properly when configured behind a firewall that limits outgoing network requests to only the configured *arr instances.
 
