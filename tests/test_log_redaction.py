@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from app.config import ArrTarget, ArrType
+from app.config import ArrTarget, ArrType, TargetSettings
 from app.log_redaction import REDACTED_VALUE, redact_sensitive_fields
 
 
@@ -44,8 +44,6 @@ class TestLogRedaction:
 
   def test_redacts_sensitive_fields_in_pydantic_models(self) -> None:
     """Redaction should sanitize pydantic model fields named api_key."""
-    from app.config import TargetSettings
-
     target = ArrTarget(
       name="Test Target",
       arr_type=ArrType.RADARR,

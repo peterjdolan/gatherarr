@@ -18,7 +18,7 @@ from openapi_core.contrib.requests.responses import RequestsOpenAPIResponse
 from openapi_core.exceptions import OpenAPIError
 
 from app.arr_client import ArrClient
-from app.config import ArrTarget, ArrType
+from app.config import ArrTarget, ArrType, TargetSettings
 from app.http_client import HttpxClient
 from app.main import create_web_app
 from app.scheduler import MovieId, Scheduler, SeasonId
@@ -249,8 +249,6 @@ def create_target(
   name: str, arr_type: ArrType, base_url: str, ops_per_interval: int, **overrides: Any
 ) -> ArrTarget:
   """Build a target for integration tests."""
-  from app.config import TargetSettings
-
   return ArrTarget(
     name=name,
     arr_type=arr_type,
@@ -262,7 +260,9 @@ def create_target(
       item_revisit_timeout_s=3600,
       require_monitored=overrides.get("require_monitored", True),
       require_cutoff_unmet=overrides.get("require_cutoff_unmet", True),
-      **{k: v for k, v in overrides.items() if k not in ("require_monitored", "require_cutoff_unmet")},
+      **{
+        k: v for k, v in overrides.items() if k not in ("require_monitored", "require_cutoff_unmet")
+      },
     ),
   )
 

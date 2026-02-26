@@ -39,7 +39,7 @@ def _parse_utc_datetime(value: Any) -> datetime | None:
 
   try:
     parsed = dateutil_parser.parse(normalized)
-  except (ValueError, TypeError):
+  except ValueError, TypeError:
     return None
 
   if parsed.tzinfo is None:
@@ -129,8 +129,13 @@ class ItemHandler(Protocol):
     """
     ...
 
-  def should_search(self, item: dict[str, Any]) -> bool:
-    """Return True when the item meets the handler search criteria."""
+  def should_search(self, item: dict[str, Any], logging_ids: dict[str, Any]) -> bool:
+    """Return True when the item meets the handler search criteria.
+
+    Args:
+      item: The item to check eligibility for.
+      logging_ids: Logging context for debug messages.
+    """
     ...
 
   async def search(
@@ -355,11 +360,7 @@ class Scheduler:
             skips_total.labels(target=target.name, type=target.arr_type.value).inc()
             continue
 
-      if not item_handler.should_search(item):
-        logger.debug(
-          "Skipping item (search criteria not met)",
-          **item_logging_ids,
-        )
+      if not item_handler.should_search(item, logging_ids=item_logging_ids):
         skips_total.labels(target=target.name, type=target.arr_type.value).inc()
         continue
 
@@ -476,19 +477,49 @@ class MovieHandler:
   def __init__(self, target: ArrTarget) -> None:
     self.target = target
 
-  def should_search(self, item: dict[str, Any]) -> bool:
+  def should_search(self, item: dict[str, Any], logging_ids: dict[str, Any]) -> bool:
     """Return True when movie satisfies configured eligibility rules."""
     if self.target.settings.require_monitored and item.get("monitored") is not True:
+      logger.debug(
+        "Skipping movie (not monitored)",
+        require_monitored=self.target.settings.require_monitored,
+        monitored=item.get("monitored"),
+        **logging_ids,
+      )
       return False
     if self.target.settings.require_cutoff_unmet and not self._is_cutoff_unmet(item):
+      logger.debug(
+        "Skipping movie (quality cutoff met)",
+        require_cutoff_unmet=self.target.settings.require_cutoff_unmet,
+        has_file=item.get("hasFile"),
+        **logging_ids,
+      )
       return False
+    item_tags = extract_item_tags(item)
     if not tag_filter(
-      extract_item_tags(item),
+      item_tags,
       self.target.settings.include_tags,
       self.target.settings.exclude_tags,
     ):
+      logger.debug(
+        "Skipping movie (tag filter not met)",
+        item_tags=sorted(item_tags) if item_tags else [],
+        include_tags=sorted(self.target.settings.include_tags)
+        if self.target.settings.include_tags
+        else [],
+        exclude_tags=sorted(self.target.settings.exclude_tags)
+        if self.target.settings.exclude_tags
+        else [],
+        **logging_ids,
+      )
       return False
     if self.target.settings.released_only and not self._is_released(item):
+      logger.debug(
+        "Skipping movie (not released)",
+        released_only=self.target.settings.released_only,
+        has_file=item.get("hasFile"),
+        **logging_ids,
+      )
       return False
     return True
 
@@ -590,7 +621,7 @@ class SeasonHandler:
       "series_name": item_id.series_name if item_id.series_name is not None else "None",
     }
 
-  def should_search(self, item: dict[str, Any]) -> bool:
+  def should_search(self, item: dict[str, Any], logging_ids: dict[str, Any]) -> bool:
     """Return True when season satisfies configured eligibility rules."""
     # Check series-level monitored status
     if self.target.settings.require_monitored:
@@ -598,29 +629,63 @@ class SeasonHandler:
       season_monitored = item.get("seasonMonitored")
       # Season must be monitored, and if series monitoring is available, series should be monitored too
       if season_monitored is not True:
+        logger.debug(
+          "Skipping season (season not monitored)",
+          require_monitored=self.target.settings.require_monitored,
+          season_monitored=season_monitored,
+          **logging_ids,
+        )
         return False
       if series_monitored is not None and series_monitored is not True:
+        logger.debug(
+          "Skipping season (series not monitored)",
+          require_monitored=self.target.settings.require_monitored,
+          series_monitored=series_monitored,
+          **logging_ids,
+        )
         return False
 
     # Check cutoff unmet status
     if self.target.settings.require_cutoff_unmet and not self._is_cutoff_unmet(item):
+      logger.debug(
+        "Skipping season (quality cutoff met)",
+        require_cutoff_unmet=self.target.settings.require_cutoff_unmet,
+        **logging_ids,
+      )
       return False
 
     # Check tag filters (using series tags)
     series_tags = item.get("seriesTags")
+    item_tags = extract_item_tags({"tags": series_tags})
     if not tag_filter(
-      extract_item_tags({"tags": series_tags}),
+      item_tags,
       self.target.settings.include_tags,
       self.target.settings.exclude_tags,
     ):
+      logger.debug(
+        "Skipping season (tag filter not met)",
+        item_tags=sorted(item_tags) if item_tags else [],
+        include_tags=sorted(self.target.settings.include_tags)
+        if self.target.settings.include_tags
+        else [],
+        exclude_tags=sorted(self.target.settings.exclude_tags)
+        if self.target.settings.exclude_tags
+        else [],
+        **logging_ids,
+      )
       return False
 
     # Check released status
     if self.target.settings.released_only and not self._is_released(item):
+      logger.debug(
+        "Skipping season (not released)",
+        released_only=self.target.settings.released_only,
+        **logging_ids,
+      )
       return False
 
     # Check missing episode thresholds
-    if not self._meets_missing_thresholds(item):
+    if not self._meets_missing_thresholds(item, logging_ids):
       return False
 
     return True
@@ -674,7 +739,7 @@ class SeasonHandler:
 
     return False
 
-  def _meets_missing_thresholds(self, item: dict[str, Any]) -> bool:
+  def _meets_missing_thresholds(self, item: dict[str, Any], logging_ids: dict[str, Any]) -> bool:
     """Validate configured season missing-episode thresholds."""
     if (
       self.target.settings.min_missing_episodes <= 0
@@ -684,20 +749,48 @@ class SeasonHandler:
 
     season_statistics = item.get("seasonStatistics")
     if season_statistics is None:
+      logger.debug(
+        "Skipping season (missing season statistics for threshold check)",
+        min_missing_episodes=self.target.settings.min_missing_episodes,
+        min_missing_percent=self.target.settings.min_missing_percent,
+        **logging_ids,
+      )
       return False
 
     missing_episode_count = self._missing_episode_count(season_statistics)
     if self.target.settings.min_missing_episodes > 0:
       if missing_episode_count is None:
+        logger.debug(
+          "Skipping season (cannot determine missing episode count)",
+          min_missing_episodes=self.target.settings.min_missing_episodes,
+          **logging_ids,
+        )
         return False
       if missing_episode_count < self.target.settings.min_missing_episodes:
+        logger.debug(
+          "Skipping season (missing episode count below threshold)",
+          missing_episode_count=missing_episode_count,
+          min_missing_episodes=self.target.settings.min_missing_episodes,
+          **logging_ids,
+        )
         return False
 
     missing_percent = self._missing_percent(season_statistics, missing_episode_count)
     if self.target.settings.min_missing_percent > 0:
       if missing_percent is None:
+        logger.debug(
+          "Skipping season (cannot determine missing episode percent)",
+          min_missing_percent=self.target.settings.min_missing_percent,
+          **logging_ids,
+        )
         return False
       if missing_percent < self.target.settings.min_missing_percent:
+        logger.debug(
+          "Skipping season (missing episode percent below threshold)",
+          missing_percent=missing_percent,
+          min_missing_percent=self.target.settings.min_missing_percent,
+          **logging_ids,
+        )
         return False
 
     return True

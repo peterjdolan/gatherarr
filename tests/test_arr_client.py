@@ -8,6 +8,7 @@ import pytest
 
 from app.arr_client import ArrClient, HttpClient
 from app.config import ArrTarget, ArrType, TargetSettings
+from app.scheduler import MovieId, SeasonId
 
 
 class FakeHttpClient(HttpClient):
@@ -123,8 +124,6 @@ class TestArrClient:
     assert ("GET", "http://test/api/v3/series") in fake_client.calls
 
   def test_search_movie(self) -> None:
-    from app.scheduler import MovieId
-
     fake_client = FakeHttpClient(responses={"http://test/api/v3/command": {"id": 1}})
     target = radarr_target()
     client = ArrClient(target, fake_client)
@@ -135,8 +134,6 @@ class TestArrClient:
     assert ("POST", "http://test/api/v3/command") in fake_client.calls
 
   def test_search_season(self) -> None:
-    from app.scheduler import SeasonId
-
     fake_client = FakeHttpClient(responses={"http://test/api/v3/command": {"id": 1}})
     target = sonarr_target()
     client = ArrClient(target, fake_client)

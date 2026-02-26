@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType, TargetSettings
 from app.scheduler import Scheduler
 from app.state import InMemoryStateStorage, ItemState, ItemStatus, RunStatus, StateManager
@@ -175,8 +176,6 @@ def create_scheduler(
   fake_client: Any,
 ) -> Scheduler:
   """Create a Scheduler with the given target, state manager, and client."""
-  from app.arr_client import ArrClient
-
   # Fake clients are compatible with ArrClient interface for testing
   arr_clients: dict[str, ArrClient] = {target.name: fake_client}
   return Scheduler([target], state_manager, arr_clients)
