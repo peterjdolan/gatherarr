@@ -117,7 +117,7 @@ class TestMovieHandler:
       "movieFile": {"qualityCutoffNotMet": True},
     }
 
-    assert handler.should_search(item) is True
+    assert handler.should_search(item, {}) is True
 
   def test_should_not_search_when_not_monitored(self) -> None:
     """Do not search when movie is not monitored."""
@@ -129,7 +129,7 @@ class TestMovieHandler:
       "movieFile": {"qualityCutoffNotMet": True},
     }
 
-    assert handler.should_search(item) is False
+    assert handler.should_search(item, {}) is False
 
   def test_should_not_search_when_cutoff_met(self) -> None:
     """Do not search when quality cutoff is already met."""
@@ -142,7 +142,7 @@ class TestMovieHandler:
       "hasFile": True,
     }
 
-    assert handler.should_search(item) is False
+    assert handler.should_search(item, {}) is False
 
   def test_should_search_when_no_file_present(self) -> None:
     """Treat movies with no file as cutoff unmet."""
@@ -154,7 +154,7 @@ class TestMovieHandler:
       "hasFile": False,
     }
 
-    assert handler.should_search(item) is True
+    assert handler.should_search(item, {}) is True
 
   def test_should_search_when_monitoring_not_required(self) -> None:
     """Search unmonitored movies when monitoring is disabled."""
@@ -166,7 +166,7 @@ class TestMovieHandler:
       "movieFile": {"qualityCutoffNotMet": True},
     }
 
-    assert handler.should_search(item) is True
+    assert handler.should_search(item, {}) is True
 
   def test_should_search_when_cutoff_not_required(self) -> None:
     """Search movies when cutoff requirement is disabled."""
@@ -179,7 +179,7 @@ class TestMovieHandler:
       "hasFile": True,
     }
 
-    assert handler.should_search(item) is True
+    assert handler.should_search(item, {}) is True
 
   def test_should_not_search_unreleased_when_released_only_enabled(self) -> None:
     """Skip unreleased movies when released_only is enabled."""
@@ -193,7 +193,7 @@ class TestMovieHandler:
       "digitalRelease": future_release,
     }
 
-    assert handler.should_search(item) is False
+    assert handler.should_search(item, {}) is False
 
   def test_should_search_released_movie_when_released_only_enabled(self) -> None:
     """Allow released movies when released_only is enabled."""
@@ -207,7 +207,7 @@ class TestMovieHandler:
       "digitalRelease": past_release,
     }
 
-    assert handler.should_search(item) is True
+    assert handler.should_search(item, {}) is True
 
   def test_should_search_respects_tag_filters(self) -> None:
     """Apply include/exclude tag filters for movies."""
@@ -227,8 +227,8 @@ class TestMovieHandler:
       "tags": ["4k", "skip"],
     }
 
-    assert handler.should_search(matching_item) is True
-    assert handler.should_search(excluded_item) is False
+    assert handler.should_search(matching_item, {}) is True
+    assert handler.should_search(excluded_item, {}) is False
 
 
 class TestSeasonHandler:
