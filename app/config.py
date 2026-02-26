@@ -168,11 +168,50 @@ class Config(BaseSettings):
     return str(path)
 
 
+_VALID_GTH_TOP_LEVEL_KEYS = frozenset(
+  {
+    "GTH_LOG_LEVEL",
+    "GTH_METRICS_ENABLED",
+    "GTH_METRICS_ADDRESS",
+    "GTH_METRICS_PORT",
+    "GTH_STATE_FILE_PATH",
+    "GTH_OPS_PER_INTERVAL",
+    "GTH_INTERVAL_S",
+    "GTH_ITEM_REVISIT_S",
+  }
+)
+
+_VALID_GTH_ARR_FIELD_PATTERN = re.compile(
+  r"^GTH_ARR_\d+_(TYPE|NAME|BASEURL|APIKEY|OPS_PER_INTERVAL|INTERVAL_S|ITEM_REVISIT_TIMEOUT_S)$"
+)
+
+
+def _is_valid_gth_key(key: str) -> bool:
+  """Return True if key is a recognized GTH_* environment variable."""
+  key_upper = key.upper()
+  if key_upper in _VALID_GTH_TOP_LEVEL_KEYS:
+    return True
+  return _VALID_GTH_ARR_FIELD_PATTERN.match(key_upper) is not None
+
+
+def _validate_no_unrecognized_gth_vars(env_dict: dict[str, str]) -> None:
+  """Raise ValueError if any GTH_* environment variables are unrecognized."""
+  gth_keys = [k for k in env_dict if k.upper().startswith("GTH_")]
+  unrecognized = [k for k in gth_keys if not _is_valid_gth_key(k)]
+  if unrecognized:
+    raise ValueError(
+      f"Unrecognized GTH_* environment variables: {', '.join(sorted(unrecognized))}. "
+      "Check configuration for typos or consult the documentation."
+    )
+
+
 def load_config(env: dict[str, str] | None = None) -> Config:
   """Load configuration from environment variables."""
   env_dict = dict(os.environ) if env is None else env
   if env is not None:
     os.environ.update(env)
+
+  _validate_no_unrecognized_gth_vars(env_dict)
 
   base_config = Config()
 

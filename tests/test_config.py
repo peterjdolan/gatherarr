@@ -167,6 +167,59 @@ class TestLoadConfig:
     with pytest.raises(ValueError, match="At least one"):
       load_config(env)
 
+  def test_load_config_rejects_unrecognized_top_level_gth_var(self) -> None:
+    env = {
+      "GTH_FOO": "bar",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    with pytest.raises(ValueError, match="Unrecognized GTH_\\* environment variables.*GTH_FOO"):
+      load_config(env)
+
+  def test_load_config_rejects_unrecognized_arr_field(self) -> None:
+    env = {
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+      "GTH_ARR_0_EXTRA_FIELD": "value",
+    }
+    with pytest.raises(
+      ValueError, match="Unrecognized GTH_\\* environment variables.*GTH_ARR_0_EXTRA_FIELD"
+    ):
+      load_config(env)
+
+  def test_load_config_rejects_multiple_unrecognized_gth_vars(self) -> None:
+    env = {
+      "GTH_UNKNOWN": "x",
+      "GTH_ARR_0_TYPO": "radarr",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    with pytest.raises(ValueError) as exc_info:
+      load_config(env)
+    err_msg = str(exc_info.value)
+    assert "Unrecognized GTH_* environment variables" in err_msg
+    assert "GTH_UNKNOWN" in err_msg
+    assert "GTH_ARR_0_TYPO" in err_msg
+
+  def test_load_config_accepts_valid_gth_vars_only(self) -> None:
+    env = {
+      "GTH_LOG_LEVEL": "debug",
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    config = load_config(env)
+    assert config.log_level == "DEBUG"
+    assert len(config.targets) == 1
+
   def test_load_config_invalid_arr_type_raises(self) -> None:
     env = {
       "GTH_STATE_FILE_PATH": "",
