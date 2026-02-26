@@ -1,4 +1,0 @@
-# This repository uses `pyproject.toml` + `uv.lock` as the source of truth.
-# Keep this file minimal for compatibility with tooling that expects it.
--e .[dev]
-

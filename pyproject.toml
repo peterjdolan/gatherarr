@@ -2,7 +2,7 @@
 name = "gatherarr"
 version = "0.1.0"
 description = "A minimal worker-style Arr search runner (initial skeleton)."
-requires-python = ">=3.13,<3.14"
+requires-python = "==3.14.*"
 license = { text = "MIT" }
 dependencies = [
   "flask>=3.0.0",
@@ -17,25 +17,29 @@ dependencies = [
 [dependency-groups]
 dev = [
   "mypy>=1.7.0",
+  "openapi-core>=0.22.0",
   "poethepoet>=0.24.0",
   "pytest>=7.4.0",
   "pytest-asyncio>=0.23.0",
   "pytest-timeout>=2.2.0",
   "ruff>=0.1.0",
   "types-pyyaml>=6.0.12",
+  "types-requests>=2.32.4.20260107",
 ]
 
 [tool.poe.tasks]
 check = ["format", "lint", "type-check", "test"]
+check-e2e = ["check", "test-e2e"]
 format = "ruff format ."
 format-check = "ruff format --check ."
 lint = "ruff check --fix ."
 lint-check = "ruff check ."
 type-check = "mypy ."
-test = "pytest tests"
+test = "pytest tests --ignore=tests/integration"
+test-e2e = "pytest tests/integration"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 100
 indent-width = 2
 
@@ -49,7 +53,7 @@ indent-style = "space"
 known-first-party = ["app"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

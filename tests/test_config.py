@@ -442,14 +442,14 @@ class TestConfigValidation:
         with pytest.raises(ValidationError) as exc_info:
           Config(state_file_path=str(state_path))
         assert "not writable" in str(exc_info.value)
-      except (OSError, PermissionError):
+      except OSError, PermissionError:
         # On some systems we can't make files read-only, skip this test
         pass
       finally:
         # Restore permissions for cleanup
         try:
           state_path.chmod(0o644)
-        except (OSError, PermissionError):
+        except OSError, PermissionError:
           pass
 
   @pytest.mark.parametrize("invalid_port", [0, -1])

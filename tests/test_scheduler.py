@@ -19,6 +19,7 @@ class FakeArrClient:
   def __init__(self, target: ArrTarget) -> None:
     self.target = target
     self.get_movies_called = False
+    self.get_seasons_called = False
     self.get_series_called = False
     self.search_movie_called = False
     self.search_series_called = False
@@ -40,6 +41,10 @@ class FakeArrClient:
       {"id": 1, "title": "Series 1", "monitored": True, "statistics": {"qualityCutoffNotMet": True}}
     ]
 
+  async def get_seasons(self, logging_ids: dict[str, Any]) -> list[dict]:
+    self.get_seasons_called = True
+    return [{"seriesId": 1, "seriesTitle": "Series 1", "seasonNumber": 1}]
+
   async def search_movie(self, movie_id: Any, logging_ids: dict[str, Any]) -> dict:
     self.search_movie_called = True
     self.search_movie_calls += 1
@@ -52,6 +57,16 @@ class FakeArrClient:
     self.search_series_id = series_id.series_id if hasattr(series_id, "series_id") else series_id
     return {"id": 1}
 
+  async def search_season(self, season_id: Any, logging_ids: dict[str, Any]) -> dict:
+    self.search_season_called = True
+    self.search_season_series_id = (
+      season_id.series_id if hasattr(season_id, "series_id") else season_id
+    )
+    self.search_season_number = (
+      season_id.season_number if hasattr(season_id, "season_number") else None
+    )
+    return {"id": 1}
+
 
 class FakeClientWithError:
   """Fake client that raises errors."""
@@ -62,7 +77,7 @@ class FakeClientWithError:
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
     raise RuntimeError("API error")
 
-  async def get_series(self, logging_ids: dict[str, Any]) -> list[dict]:
+  async def get_seasons(self, logging_ids: dict[str, Any]) -> list[dict]:
     raise RuntimeError("API error")
 
 

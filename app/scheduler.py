@@ -8,9 +8,9 @@ from typing import Any, Protocol
 
 import structlog
 
+from app.action_logging import Action, log_item_action, log_movie_action, log_season_action
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
-from app.logging import Action, log_movie_action, log_series_action
 from app.metrics import (
   grabs_total,
   last_success_timestamp_seconds,
@@ -98,11 +98,32 @@ class SeriesId(ItemId):
     }
 
 
+@dataclass
+class SeasonId(ItemId):
+  """Item identifier for individual seasons."""
+
+  series_id: int
+  season_number: int
+  series_name: str | None
+
+  def format_for_state(self) -> str:
+    """Format season identity for state lookup."""
+    return f"{self.series_id}:{self.season_number}"
+
+  def logging_ids(self) -> dict[str, Any]:
+    """Get logging identifiers for the season."""
+    return {
+      "series_id": str(self.series_id),
+      "season_number": str(self.season_number),
+      "series_name": self.series_name if self.series_name is not None else "None",
+    }
+
+
 class ItemHandler(Protocol):
   """Protocol for handling individual items.
 
   The ItemHandler abstracts away item-type-specific details (such as movie_id, series_id,
-  season_id) from the scheduler. The scheduler works with generic items and delegates
+  season_number) from the scheduler. The scheduler works with generic items and delegates
   all item-type-specific operations (ID extraction, logging, searching) to the handler.
 
   This separation ensures the scheduler never needs to know about item-type-specific
@@ -146,7 +167,7 @@ class Scheduler:
 
   The scheduler operates at a high level, working with generic items and delegating
   all item-type-specific operations to ItemHandler implementations. It never needs
-  to know about item-type-specific concepts like movie_id, series_id, or season_id.
+  to know about item-type-specific concepts like movie_id, series_id, or season_number.
 
   All item identification, logging format, and search operations are abstracted
   through the ItemHandler protocol, ensuring a clean separation of concerns.
@@ -712,10 +733,11 @@ class SeriesHandler:
     if item_id is None:
       return {}
 
+    series_id = item_id.series_id
     series_name = item.get("title")
 
     return {
-      "series_id": str(item_id.series_id),
+      "series_id": str(series_id),
       "series_name": series_name if series_name is not None else "None",
     }
 
@@ -727,17 +749,17 @@ class SeriesHandler:
   ) -> None:
     """Trigger search for a series and log the action."""
 
-    series_id = self.extract_item_id(item)
-    if series_id is None:
+    item_id = self.extract_item_id(item)
+    if item_id is None:
       raise ValueError("Series ID is required")
 
     item_logging_ids = self.extract_logging_id(item)
     combined_logging_ids = {**logging_ids, **item_logging_ids}
-    await client.search_series(series_id, logging_ids=combined_logging_ids)
+    await client.search_series(item_id, logging_ids=combined_logging_ids)
 
-    log_series_action(
+    log_item_action(
       logger=logger,
       action=Action.SEARCH_SERIES,
-      series_id=series_id,
+      item_id=item_id,
       **logging_ids,
     )
