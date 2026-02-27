@@ -61,6 +61,7 @@ The single entry point. Responsibilities:
 
 - **Loop:** Every 1 second, checks which targets are due (based on `interval_s` since last run). Runs due targets concurrently via `asyncio.gather`.
 - **Per-target run:** Fetches items via `ArrClient`, selects handler by target type (Radarr → MovieHandler, Sonarr → SeasonHandler), processes items via `ItemHandler` protocol.
+- **Revisit and backoff:** The Scheduler is responsible for deciding when an item should *not* be searched because it was processed recently. For each item it looks up `ItemState` (from `StateManager`) and applies: (1) **Success revisit** — if `last_status == SUCCESS` and `time_since_last < item_revisit_s`, skip; (2) **Failure backoff** — if `last_status != SUCCESS` and `search_backoff_s > 0` and `time_since_last < search_backoff_s`, skip. Handlers do not participate in revisit/backoff decisions.
 - **Item processing order:** Extract logging ID → extract item ID → state/backoff checks → eligibility (`should_search`) → search (or dry-run).
 - **Metrics:** Updates `run_total`, `grabs_total`, `skips_total`, `request_errors_total`, etc.
 - **State:** Persists after each run; increments `total_runs`.
