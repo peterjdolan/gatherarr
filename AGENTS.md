@@ -103,9 +103,9 @@ Before suggesting code changes are complete:
 
 ## Cursor Cloud specific instructions
 
-- Start by reading `AGENTS.md`, `README.md`, and `PRD.md`.
+- Start by reading `AGENTS.md`, `README.md`, `PRD.md`, and `SYSTEM.md` (architecture).
 - Update `README.md` to document user-impacting details.
-- Update `PRD.md` to document product feature set, system architecture, and design decisions.
+- Update `PRD.md` to document product feature set. Update `SYSTEM.md` for architectural changes and design decisions.
 - Update `AGENTS.md` to document coding style and agent instructions.
 - Use the smallest high-signal test set for touched code; avoid running unrelated large suites.
 - For non-trivial changes, run at minimum `uv run poe check` to verify code formatting, type safety, and the unit test suite.

@@ -17,7 +17,7 @@ Huntarrs are great, but when you need a calm, reliable, and simple helper, you n
 - **Configuration model:** Environment variables only.
 - **Security model:** No sensitive information written to disk or emitted in logs. No outgoing network requests except to the configured *arr servers. No telemetry or monitoring.
 
-For full product requirements, architecture, and planned features, see [PRD.md](PRD.md).
+For product requirements, see [PRD.md](PRD.md). For system architecture and design decisions, see [SYSTEM.md](SYSTEM.md).
 
 ## Roadmap
 
