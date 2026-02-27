@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 if TYPE_CHECKING:
-  from app.scheduler import ItemId, MovieId, SeasonId
+  from app.handlers import ItemId, MovieId, SeasonId
 
 
 class Action(StrEnum):

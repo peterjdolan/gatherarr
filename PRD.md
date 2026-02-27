@@ -215,7 +215,6 @@ Applied when an item's search fails; determines how long to wait before retrying
 
 **Architectural changes (readability, robustness, testability, security):**
 
-- **Scheduler module split:** Extract `MovieHandler` and `SeasonHandler` from the scheduler into dedicated handler modules (`app/handlers/`) to reduce file size and improve readability.
 - **ItemHandler protocol documentation:** Document the ItemHandler contract (extract_item_id, extract_logging_id, should_search, search) in the PRD to support consistent Fake implementations and future extensibility (e.g. Lidarr in v0.2).
 - **HTTP base URL validation:** At config load, warn or fail when a target `base_url` uses `http://` instead of `https://`, since API keys are transmitted in cleartext over HTTP.
 - **Configuration schema documentation:** Document the full environment variable schema (names, types, defaults, per-target overrides) in README or a dedicated config reference so the source of truth is explicit and testable.

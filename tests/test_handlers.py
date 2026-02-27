@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app.config import ArrTarget, ArrType, TargetSettings
-from app.scheduler import MovieHandler, MovieId, SeasonHandler, SeasonId
+from app.handlers import MovieHandler, MovieId, SeasonHandler, SeasonId
 
 
 def movie_target(
