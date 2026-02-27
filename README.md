@@ -21,7 +21,7 @@ For full product requirements, architecture, and planned features, see [PRD.md](
 
 ## Roadmap
 
-- **v0.1 (coming soon):** Retry configuration (HTTP and failed-search), configurable HTTP timeout and graceful shutdown, startup banner with full config display, health endpoint always served (independent of metrics), config validation summary, expanded log redaction, state size cap (10 MB), and architectural improvements (ItemHandler protocol, HTTP base URL validation).
+- **v0.1 (coming soon):** Retry configuration (HTTP and failed-search), configurable HTTP timeout and graceful shutdown, startup banner with full config display, health endpoint always served (independent of metrics), config validation summary, expanded log redaction, state size cap (10 MB), and architectural improvements (HTTP base URL validation).
 - **v0.2:** Lidarr and Whisparr support.
 - **v1.0:** Backwards compatibility for configuration. Until v1.0, configuration variable names and behavior may change between releases.
 

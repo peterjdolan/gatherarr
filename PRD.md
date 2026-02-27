@@ -194,6 +194,42 @@ Applied when an item's search fails; determines how long to wait before retrying
 - The health endpoint MUST always be available and served, regardless of whether the metrics endpoint is enabled. When metrics are disabled, a minimal HTTP server still runs to serve `/health`.
 - The health and metrics endpoints MUST be bound to the same listen address and port. Configuration uses general parameters (`listen_address`, `listen_port`) rather than metrics-specific names, since the HTTP server hosts both endpoints.
 
+## Architecture
+
+### ItemHandler Protocol
+
+The scheduler operates at a high level, working with generic items and delegating all item-type-specific operations to `ItemHandler` implementations. The protocol abstracts away item-type details (movie_id, series_id, season_number) so the scheduler never needs to know about app-specific concepts.
+
+**Purpose:** Support consistent Fake implementations for testing, and enable future extensibility (e.g. Lidarr in v0.2) by defining a clear, testable contract.
+
+#### ItemId
+
+Item identifiers extend `ItemId`, which requires:
+
+- `format_for_state() -> str`: Returns a string key for state lookup. Must be deterministic and unique per item (e.g. `"42"` for movies, `"123:4"` for series/season).
+- `logging_ids() -> dict[str, Any]`: Returns correlation fields for structured logging (e.g. `movie_id`, `movie_name` or `series_id`, `season_number`, `series_name`).
+
+#### ItemHandler Methods
+
+| Method | Purpose | Inputs | Returns | Notes |
+|--------|---------|--------|---------|-------|
+| `extract_item_id(item)` | Extract identifier for state tracking and revisit timing | `item`: raw API response dict | `ItemId \| None` | Returns `None` when item has no valid ID. Used for state lookup and backoff calculations. |
+| `extract_logging_id(item)` | Extract logging correlation fields | `item`: raw API response dict | `dict[str, str]` | Returns empty dict when ID extraction fails. Values are strings suitable for log kwargs. |
+| `should_search(item, logging_ids)` | Apply eligibility rules | `item`: raw API response dict; `logging_ids`: context for debug logs | `bool` | Implements monitored status, quality cutoff, release status, tag filters, and app-specific rules (e.g. Sonarr missing-episode thresholds). Logs debug on skip. |
+| `search(client, item, logging_ids)` | Trigger search and log action | `client`: ArrClient (or Fake); `item`: raw API response dict; `logging_ids`: context | `None` (async) | Calls client search method, then logs at INFO. Raises on missing ID or API failure. |
+
+#### Call Order
+
+The scheduler invokes handlers in this order per item: `extract_logging_id` → `extract_item_id` → (state/backoff checks) → `should_search` → `search`.
+
+#### Fake Implementations
+
+Fake ItemHandlers must implement all four methods. For `search`, a Fake typically invokes a Fake ArrClient (or in-memory store) instead of making HTTP requests. `extract_item_id` and `extract_logging_id` should return values consistent with the item dict shape used in tests. `should_search` can be configured to return `True` or `False` to simulate eligible/ineligible items.
+
+#### Extensibility (e.g. Lidarr v0.2)
+
+New *arr apps require a handler that implements this protocol, an `ItemId` subclass, and corresponding ArrClient search methods. The scheduler wires handlers by target type; no scheduler logic changes are needed beyond mapping the new type to its handler.
+
 ## Milestones
 
 ### v0.1 (Current)
@@ -215,7 +251,6 @@ Applied when an item's search fails; determines how long to wait before retrying
 
 **Architectural changes (readability, robustness, testability, security):**
 
-- **ItemHandler protocol documentation:** Document the ItemHandler contract (extract_item_id, extract_logging_id, should_search, search) in the PRD to support consistent Fake implementations and future extensibility (e.g. Lidarr in v0.2).
 - **HTTP base URL validation:** At config load, warn or fail when a target `base_url` uses `http://` instead of `https://`, since API keys are transmitted in cleartext over HTTP.
 - **Configuration schema documentation:** Document the full environment variable schema (names, types, defaults, per-target overrides) in README or a dedicated config reference so the source of truth is explicit and testable.
 
