@@ -156,7 +156,7 @@ class FileStateStorage:
       try:
         with self.state_file_path.parent.open("r") as parent_fd:
           os.fsync(parent_fd.fileno())
-      except (OSError, AttributeError):
+      except OSError, AttributeError:
         pass
       logger.debug("State file written successfully", state_file_path=str(self.state_file_path))
     finally:
