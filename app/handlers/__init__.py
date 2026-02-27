@@ -1,8 +1,8 @@
 """Item handlers for Radarr and Sonarr."""
 
-from app.handlers.base import ItemHandler, ItemId, MovieId, SeasonId
-from app.handlers.movie import MovieHandler
-from app.handlers.season import SeasonHandler
+from app.handlers.base import ItemHandler, ItemId
+from app.handlers.movie import MovieHandler, MovieId
+from app.handlers.season import SeasonHandler, SeasonId
 
 __all__ = [
   "ItemHandler",

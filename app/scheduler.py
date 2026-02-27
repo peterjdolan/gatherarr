@@ -7,6 +7,7 @@ from typing import Any
 
 import structlog
 
+from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType
 from app.handlers import ItemHandler, MovieHandler, SeasonHandler
 from app.metrics import (
@@ -39,7 +40,7 @@ class Scheduler:
     self,
     config_targets: list[ArrTarget],
     state_manager: StateManager,
-    arr_clients: dict[str, Any],
+    arr_clients: dict[str, ArrClient],
   ) -> None:
     self.config_targets = config_targets
     self.state_manager = state_manager
@@ -163,7 +164,7 @@ class Scheduler:
   async def _process_items(
     self,
     target: ArrTarget,
-    client: Any,
+    client: ArrClient,
     items: list[dict[str, Any]],
     target_state: TargetState,
     item_handler: ItemHandler,

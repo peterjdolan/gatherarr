@@ -1,5 +1,6 @@
 """Handler for processing individual seasons."""
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -8,10 +9,31 @@ import structlog
 from app.action_logging import Action, log_season_action
 from app.arr_client import ArrClient
 from app.config import ArrTarget
-from app.handlers.base import SeasonId, _parse_utc_datetime
+from app.handlers.base import ItemId, _parse_utc_datetime
 from app.tag_utils import extract_item_tags, tag_filter
 
 logger = structlog.get_logger()
+
+
+@dataclass
+class SeasonId(ItemId):
+  """Item identifier for individual seasons."""
+
+  series_id: int
+  season_number: int
+  series_name: str | None
+
+  def format_for_state(self) -> str:
+    """Format season identity for state lookup."""
+    return f"{self.series_id}:{self.season_number}"
+
+  def logging_ids(self) -> dict[str, Any]:
+    """Get logging identifiers for the season."""
+    return {
+      "series_id": str(self.series_id),
+      "season_number": str(self.season_number),
+      "series_name": self.series_name if self.series_name is not None else "None",
+    }
 
 
 class SeasonHandler:

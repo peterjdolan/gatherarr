@@ -1,5 +1,6 @@
 """Handler for processing movies."""
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -8,10 +9,29 @@ import structlog
 from app.action_logging import Action, log_movie_action
 from app.arr_client import ArrClient
 from app.config import ArrTarget
-from app.handlers.base import MovieId, _parse_utc_datetime
+from app.handlers.base import ItemId, _parse_utc_datetime
 from app.tag_utils import extract_item_tags, tag_filter
 
 logger = structlog.get_logger()
+
+
+@dataclass
+class MovieId(ItemId):
+  """Item identifier for movies."""
+
+  movie_id: int
+  movie_name: str | None
+
+  def format_for_state(self) -> str:
+    """Format movie ID for state lookup."""
+    return str(self.movie_id)
+
+  def logging_ids(self) -> dict[str, Any]:
+    """Get logging identifiers for the movie."""
+    return {
+      "movie_id": str(self.movie_id),
+      "movie_name": self.movie_name if self.movie_name is not None else "None",
+    }
 
 
 class MovieHandler:

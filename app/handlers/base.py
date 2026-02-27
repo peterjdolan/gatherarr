@@ -39,46 +39,6 @@ class ItemId:
     raise NotImplementedError
 
 
-@dataclass
-class MovieId(ItemId):
-  """Item identifier for movies."""
-
-  movie_id: int
-  movie_name: str | None
-
-  def format_for_state(self) -> str:
-    """Format movie ID for state lookup."""
-    return str(self.movie_id)
-
-  def logging_ids(self) -> dict[str, Any]:
-    """Get logging identifiers for the movie."""
-    return {
-      "movie_id": str(self.movie_id),
-      "movie_name": self.movie_name if self.movie_name is not None else "None",
-    }
-
-
-@dataclass
-class SeasonId(ItemId):
-  """Item identifier for individual seasons."""
-
-  series_id: int
-  season_number: int
-  series_name: str | None
-
-  def format_for_state(self) -> str:
-    """Format season identity for state lookup."""
-    return f"{self.series_id}:{self.season_number}"
-
-  def logging_ids(self) -> dict[str, Any]:
-    """Get logging identifiers for the season."""
-    return {
-      "series_id": str(self.series_id),
-      "season_number": str(self.season_number),
-      "series_name": self.series_name if self.series_name is not None else "None",
-    }
-
-
 class ItemHandler(Protocol):
   """Protocol for handling individual items.
 
