@@ -136,10 +136,7 @@ Unrecognized `GTH_*` variables cause startup failure. This avoids silent typos a
 
 ## Security
 
-- **Secrets in logs:** Redaction via `log_redaction`; API keys never emitted.
-- **HTTP vs HTTPS:** Plain HTTP sends API keys in cleartext. PRD v0.1 adds validation to warn/fail on `http://` base URLs.
-- **Metrics endpoint:** No built-in auth; deployments must use reverse proxy or network controls.
-- **Container:** Runs as non-root; no privileged operations.
+- **Container:** The image runs as a non-root user with no privileged operations; this is an architectural constraint of the deployment model.
 
 ## Robustness
 
