@@ -1,6 +1,7 @@
 """Utilities for normalizing and filtering item tags."""
 
 from collections.abc import Iterable
+from typing import Any
 
 
 def normalize_tag_set(raw_tags: Iterable[object]) -> set[str]:
@@ -24,7 +25,7 @@ def coerce_tag_set(raw_value: object) -> set[str]:
   raise ValueError("tags must be a CSV string, list, tuple, or set")
 
 
-def extract_item_tags(item: dict[str, object]) -> set[str]:
+def extract_item_tags(item: dict[str, Any]) -> set[str]:
   """Extract and normalize tags from an item payload."""
   raw_tags = item.get("tags")
   if isinstance(raw_tags, (list, set, tuple)):

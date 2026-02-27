@@ -28,7 +28,7 @@ from app.tag_utils import extract_item_tags, tag_filter
 logger = structlog.get_logger()
 
 
-def _parse_utc_datetime(value: object) -> datetime | None:
+def _parse_utc_datetime(value: Any) -> datetime | None:
   """Parse a date/time string into a timezone-aware UTC datetime."""
   if not isinstance(value, str):
     return None

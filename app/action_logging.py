@@ -1,7 +1,7 @@
 """Helper functions for consistent item-related logging with correlation fields."""
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -22,7 +22,7 @@ def log_item_action(
   logger: structlog.BoundLogger,
   action: Action,
   item_id: "ItemId",
-  **kwargs: object,
+  **kwargs: Any,
 ) -> None:
   """Helper function to log an item-related action with correlation fields at INFO level.
 
@@ -43,7 +43,7 @@ def log_movie_action(
   logger: structlog.BoundLogger,
   action: Action,
   movie_id: "MovieId",
-  **kwargs: object,
+  **kwargs: Any,
 ) -> None:
   """Log a movie-related action with required movie_id correlation field at INFO level.
 
@@ -65,7 +65,7 @@ def log_season_action(
   logger: structlog.BoundLogger,
   action: Action,
   season_id: "SeasonId",
-  **kwargs: object,
+  **kwargs: Any,
 ) -> None:
   """Log a season-related action with required season correlation fields at INFO level.
 
