@@ -38,7 +38,7 @@ def _redact_value(value: Any) -> Any:
   return value
 
 
-def _redact_mapping(mapping: Mapping[Any, Any]) -> dict[str, Any]:
+def _redact_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
   """Redact sensitive keys from a dictionary-like mapping."""
   redacted: dict[str, Any] = {}
   for key, value in mapping.items():

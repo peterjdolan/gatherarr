@@ -6,7 +6,7 @@ import os
 import re
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TypeVar
 from urllib.parse import urlparse
 
 import structlog
@@ -202,7 +202,7 @@ class ArrTarget(BaseModel):
       self._logging_ids = {"target_name": self.name, "target_type": self.arr_type.value}
     return self._logging_ids
 
-  def config_logging_tags(self) -> dict[str, Any]:
+  def config_logging_tags(self) -> dict[str, int | float | bool | list[str]]:
     """Return target configuration values suitable for logging."""
     tags = self.model_dump(mode="json", exclude={"api_key", "settings"})
     settings_attrs = [

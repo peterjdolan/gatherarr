@@ -13,11 +13,11 @@ logger = structlog.get_logger()
 class AsyncHttpClient(Protocol):
   """Protocol for async HTTP client interface."""
 
-  async def get(self, url: Any, *args: Any, **kwargs: Any) -> "HttpResponse":
+  async def get(self, url: str, *args: Any, **kwargs: Any) -> "HttpResponse":
     """Make GET request."""
     ...
 
-  async def post(self, url: Any, *args: Any, **kwargs: Any) -> "HttpResponse":
+  async def post(self, url: str, *args: Any, **kwargs: Any) -> "HttpResponse":
     """Make POST request."""
     ...
 
