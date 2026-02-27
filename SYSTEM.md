@@ -15,42 +15,22 @@ Gatherarr is a worker-style daemon that periodically triggers search operations 
 
 ## Component Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              app/main.py                                     │
-│  - load_config() → Config                                                    │
-│  - StateManager(storage) → state_manager                                     │
-│  - ArrClient per target → arr_clients                                        │
-│  - Scheduler(targets, state_manager, arr_clients)                             │
-│  - Flask: /health, /metrics (when metrics enabled)                           │
-│  - Signal handling (SIGTERM, SIGINT) → shutdown                              │
-└────────────────────────────┬────────────────────────────────────────────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        ▼                    ▼                    ▼
-┌───────────────┐   ┌──────────────────┐   ┌──────────────────┐
-│ app/config.py │   │ app/scheduler.py │   │  app/state.py     │
-│ - load_config │   │ - run_once()     │   │ - StateManager    │
-│ - Config      │   │ - _process_items │   │ - StateStorage    │
-│ - ArrTarget   │   │ - ItemHandler    │   │ - File/InMemory   │
-└───────────────┘   └────────┬─────────┘   └───────────────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              ▼              ▼              ▼
-     ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐
-     │ MovieHandler│ │SeasonHandler│ │  app/arr_client  │
-     └─────────────┘ └─────────────┘ │ - ArrClient      │
-                                     │ - search_movie  │
-                                     │ - get_seasons   │
-                                     │ - search_season │
-                                     └────────┬───────┘
-                                              │
-                                              ▼
-                                     ┌─────────────────┐
-                                     │ app/http_client │
-                                     │ - HttpxClient    │
-                                     │ - HttpClient    │
-                                     └─────────────────┘
+```mermaid
+flowchart TD
+    Main["app/main.py<br>load_config, StateManager, ArrClient<br>Scheduler, Flask /health /metrics<br>Signal handling"]
+    Config["app/config.py<br>load_config, Config, ArrTarget"]
+    State["app/state.py<br>StateManager, StateStorage<br>File / InMemory"]
+    Scheduler["app/scheduler.py<br>run_once, _process_items<br>ItemHandler dispatch"]
+    Handlers["app/handlers<br>MovieHandler, SeasonHandler"]
+    ArrClient["app/arr_client<br>ArrClient<br>get_movies, get_seasons<br>search_movie, search_season"]
+    HttpClient["app/http_client<br>HttpxClient, HttpClient"]
+
+    Main --> Config
+    Main --> State
+    Main --> Scheduler
+    Scheduler --> Handlers
+    Scheduler --> ArrClient
+    ArrClient --> HttpClient
 ```
 
 ### Main Module (`app/main.py`)
