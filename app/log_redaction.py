@@ -15,7 +15,7 @@ SENSITIVE_KEYS = frozenset(
 
 
 def redact_sensitive_fields(
-  logger: Any, method_name: str, event_dict: Mapping[str, Any]
+  logger: object, method_name: str, event_dict: Mapping[str, Any]
 ) -> dict[str, Any]:
   """Redact sensitive fields from structlog event dictionaries."""
   _ = logger
@@ -23,7 +23,7 @@ def redact_sensitive_fields(
   return _redact_mapping(event_dict)
 
 
-def _redact_value(value: Any) -> Any:
+def _redact_value(value: object) -> Any:
   """Redact sensitive keys recursively in supported container types."""
   if isinstance(value, dict):
     return _redact_mapping(value)
@@ -38,7 +38,7 @@ def _redact_value(value: Any) -> Any:
   return value
 
 
-def _redact_mapping(mapping: Mapping[Any, Any]) -> dict[str, Any]:
+def _redact_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
   """Redact sensitive keys from a dictionary-like mapping."""
   redacted: dict[str, Any] = {}
   for key, value in mapping.items():

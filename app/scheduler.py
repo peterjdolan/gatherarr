@@ -28,7 +28,7 @@ from app.tag_utils import extract_item_tags, tag_filter
 logger = structlog.get_logger()
 
 
-def _parse_utc_datetime(value: Any) -> datetime | None:
+def _parse_utc_datetime(value: object) -> datetime | None:
   """Parse a date/time string into a timezone-aware UTC datetime."""
   if not isinstance(value, str):
     return None
@@ -55,7 +55,7 @@ class ItemId:
     """Format the item ID for use as a state lookup key."""
     raise NotImplementedError
 
-  def logging_ids(self) -> dict[str, Any]:
+  def logging_ids(self) -> dict[str, str]:
     """Get logging identifiers for the item."""
     raise NotImplementedError
 
@@ -71,7 +71,7 @@ class MovieId(ItemId):
     """Format movie ID for state lookup."""
     return str(self.movie_id)
 
-  def logging_ids(self) -> dict[str, Any]:
+  def logging_ids(self) -> dict[str, str]:
     """Get logging identifiers for the movie."""
     return {
       "movie_id": str(self.movie_id),
@@ -91,7 +91,7 @@ class SeasonId(ItemId):
     """Format season identity for state lookup."""
     return f"{self.series_id}:{self.season_number}"
 
-  def logging_ids(self) -> dict[str, Any]:
+  def logging_ids(self) -> dict[str, str]:
     """Get logging identifiers for the season."""
     return {
       "series_id": str(self.series_id),

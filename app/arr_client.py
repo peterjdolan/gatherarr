@@ -141,9 +141,9 @@ class ArrClient:
     logger.debug("Fetching movies", **get_movies_logging_ids)
     try:
       result = await self._request("GET", url, get_movies_logging_ids)
-      movie_count = len(result)
-      logger.debug("Fetched movies", movie_count=movie_count, **get_movies_logging_ids)
-      return cast(list[dict[str, Any]], result)
+      movies = cast(list[dict[str, Any]], result)
+      logger.debug("Fetched movies", movie_count=len(movies), **get_movies_logging_ids)
+      return movies
     except Exception as e:
       logger.exception(
         "Exception while fetching movies",
