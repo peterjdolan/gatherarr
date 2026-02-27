@@ -21,7 +21,8 @@ from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType, TargetSettings
 from app.http_client import HttpxClient
 from app.main import create_web_app
-from app.scheduler import MovieId, Scheduler, SeasonId
+from app.handlers import MovieId, SeasonId
+from app.scheduler import Scheduler
 from app.state import FileStateStorage, StateManager
 
 RouteKey = tuple[str, str]

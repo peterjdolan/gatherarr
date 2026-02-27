@@ -8,7 +8,7 @@ import pytest
 
 from app.arr_client import ArrClient, HttpClient
 from app.config import ArrTarget, ArrType, TargetSettings
-from app.scheduler import MovieId, SeasonId
+from app.handlers import MovieId, SeasonId
 
 
 class FakeHttpClient(HttpClient):

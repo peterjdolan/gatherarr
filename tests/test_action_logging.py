@@ -4,7 +4,7 @@ from typing import Any
 
 from app.action_logging import Action, log_item_action, log_movie_action, log_season_action
 from app.config import ArrType
-from app.scheduler import MovieId, SeasonId
+from app.handlers import MovieId, SeasonId
 
 
 class FakeLogger:
