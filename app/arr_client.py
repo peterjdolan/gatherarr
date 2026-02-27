@@ -16,7 +16,7 @@ from app.action_logging import Action
 from app.config import ArrTarget, ArrType
 
 if TYPE_CHECKING:
-  from app.scheduler import MovieId, SeasonId
+  from app.handlers import MovieId, SeasonId
 
 logger = structlog.get_logger()
 
