@@ -16,6 +16,7 @@ from app.config import load_config
 from app.http_client import HttpxClient
 from app.log_redaction import redact_sensitive_fields
 from app.scheduler import Scheduler
+from app.startup_banner import format_banner
 from app.state import FileStateStorage, InMemoryStateStorage, StateManager, StateStorage
 
 logger = structlog.get_logger()
@@ -79,6 +80,7 @@ async def main() -> None:
     sys.exit(1)
 
   setup_logging(config.log_level)
+  logger.info(format_banner(config))
   logger.debug(
     "Configuration loaded and logging configured",
     targets=len(config.targets),
@@ -140,16 +142,27 @@ async def main() -> None:
   except KeyboardInterrupt:
     pass
   finally:
-    logger.debug("Shutting down...")
+    logger.debug(
+      "Shutting down...",
+      shutdown_timeout_s=config.shutdown_timeout_s,
+    )
     logger.debug("Stopping scheduler")
     scheduler.stop()
-    logger.debug("Cancelling scheduler task")
-    scheduler_task.cancel()
     try:
-      await scheduler_task
+      await asyncio.wait_for(scheduler_task, timeout=config.shutdown_timeout_s)
+      logger.debug("Scheduler stopped gracefully")
+    except asyncio.TimeoutError:
+      logger.debug(
+        "Scheduler did not stop within timeout, cancelling",
+        shutdown_timeout_s=config.shutdown_timeout_s,
+      )
+      scheduler_task.cancel()
+      try:
+        await scheduler_task
+      except asyncio.CancelledError:
+        logger.debug("Scheduler task cancelled")
     except asyncio.CancelledError:
       logger.debug("Scheduler task cancelled")
-      pass
 
     logger.debug("Closing HTTP client")
     await http_client_instance.aclose()

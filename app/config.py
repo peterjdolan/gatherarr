@@ -258,6 +258,7 @@ class Config(BaseSettings):
   min_missing_episodes: int = Field(default=0, ge=0)
   min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
   http_timeout_s: float = Field(default=30.0, ge=0.1)
+  shutdown_timeout_s: float = Field(default=30.0, ge=0.0)
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
 
   @field_validator("log_level")
@@ -393,6 +394,14 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       api_key=env_dict[apikey_key],
       settings=resolved_settings,
     )
+    parsed_url = urlparse(target.base_url)
+    if parsed_url.scheme == "http":
+      logger.warning(
+        "Target base_url uses HTTP; API key is transmitted in cleartext. Prefer HTTPS.",
+        target_name=target.name,
+        target_type=target.arr_type.value,
+        base_url=target.base_url,
+      )
     logger.debug(
       "Target configuration created",
       index=n,
