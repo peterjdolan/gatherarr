@@ -50,16 +50,33 @@ class ArrClient:
     self,
     target: ArrTarget,
     http_client: HttpClient,
-    max_retries: int = 3,
-    retry_delay_s: float = 1.0,
-    timeout_s: float = 30.0,
+    *,
+    max_retries: int | None = None,
+    retry_initial_delay_s: float | None = None,
+    retry_backoff_exponent: float | None = None,
+    retry_max_delay_s: float | None = None,
+    timeout_s: float | None = None,
   ) -> None:
+    """Initialize ArrClient. Retry and timeout params from target.settings when None."""
+    settings = target.settings
     self.target = target
     self.base_url = target.base_url.rstrip("/")
     self.http_client = http_client
-    self.max_retries = max_retries
-    self.retry_delay_s = retry_delay_s
-    self.timeout_s = timeout_s
+    self.max_retries = max_retries if max_retries is not None else settings.http_max_retries
+    self.retry_initial_delay_s = (
+      retry_initial_delay_s
+      if retry_initial_delay_s is not None
+      else settings.http_retry_initial_delay_s
+    )
+    self.retry_backoff_exponent = (
+      retry_backoff_exponent
+      if retry_backoff_exponent is not None
+      else settings.http_retry_backoff_exponent
+    )
+    self.retry_max_delay_s = (
+      retry_max_delay_s if retry_max_delay_s is not None else settings.http_retry_max_delay_s
+    )
+    self.timeout_s = timeout_s if timeout_s is not None else settings.http_timeout_s
 
   def _get_headers(self) -> dict[str, str]:
     """Get HTTP headers for API requests."""
@@ -68,8 +85,13 @@ class ArrClient:
   def _make_retry_decorator(self) -> Any:
     """Create a retry decorator with instance-specific configuration."""
     return retry(
-      stop=stop_after_attempt(self.max_retries),
-      wait=wait_exponential(multiplier=self.retry_delay_s, min=self.retry_delay_s, max=10.0),
+      stop=stop_after_attempt(self.max_retries + 1),
+      wait=wait_exponential(
+        multiplier=self.retry_initial_delay_s,
+        min=self.retry_initial_delay_s,
+        max=self.retry_max_delay_s,
+        exp_base=self.retry_backoff_exponent,
+      ),
       retry=retry_if_exception_type((httpx.RequestError, httpx.TimeoutException, TimeoutError))
       | retry_if_exception(_is_retryable_response_error),
       reraise=True,
@@ -88,7 +110,7 @@ class ArrClient:
       "url": url,
       "has_payload": payload is not None,
       "timeout_s": self.timeout_s,
-      "max_retries": self.max_retries,
+      "http_max_retries": self.max_retries,
       **self.target.logging_ids(),
       **logging_ids,
     }

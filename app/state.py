@@ -39,6 +39,7 @@ class ItemState:
   last_processed_timestamp: float
   last_result: str
   last_status: ItemStatus
+  consecutive_failures: int = 0
 
   def logging_ids(self) -> dict[str, str]:
     """Logging identifiers for the item."""
@@ -47,6 +48,7 @@ class ItemState:
       "item_last_processed_timestamp": str(self.last_processed_timestamp),
       "item_last_result": self.last_result,
       "item_last_status": self.last_status.value,
+      "item_consecutive_failures": str(self.consecutive_failures),
     }
 
 
@@ -287,6 +289,7 @@ class StateManager:
           last_processed_timestamp=item_data["last_processed_timestamp"],
           last_result=item_data["last_result"],
           last_status=item_status,
+          consecutive_failures=item_data.get("consecutive_failures", 0),
         )
 
       state.targets[target_name] = target_state

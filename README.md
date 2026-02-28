@@ -21,7 +21,7 @@ For product requirements, see [PRD.md](PRD.md). For system architecture and desi
 
 ## Roadmap
 
-- **v0.1 (coming soon):** Retry configuration (HTTP and failed-search), configurable HTTP timeout and graceful shutdown, startup banner with full config display, health endpoint always served (independent of metrics), config validation summary, expanded log redaction, state size cap (10 MB), and architectural improvements (HTTP base URL validation).
+- **v0.1 (in progress):** Health endpoint always served (independent of metrics), config validation summary and duplicate target name rejection, expanded log redaction.
 - **v0.2:** Lidarr and Whisparr support.
 - **v1.0:** Backwards compatibility for configuration. Until v1.0, configuration variable names and behavior may change between releases.
 
@@ -83,7 +83,16 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 #### Filtering and tuning
 
 - `GTH_RELEASED_ONLY`: (Optional) Only search items that have been released, `true|false`, default `false`.
-- `GTH_SEARCH_BACKOFF_S`: (Optional) Minimum time in seconds to wait before retrying a previously failed item search, default `0` (no backoff).
+- `GTH_HTTP_MAX_RETRIES`: (Optional) Maximum HTTP retry attempts per request (network/5xx/429), default `3`.
+- `GTH_HTTP_RETRY_INITIAL_DELAY_S`: (Optional) Initial retry delay in seconds for HTTP requests, default `1.0`.
+- `GTH_HTTP_RETRY_BACKOFF_EXPONENT`: (Optional) Exponential backoff multiplier for HTTP retries, default `2.0`.
+- `GTH_HTTP_RETRY_MAX_DELAY_S`: (Optional) Maximum delay between HTTP retries in seconds, default `30.0`.
+- `GTH_HTTP_TIMEOUT_S`: (Optional) Timeout for all HTTP requests in seconds, default `30.0`.
+- `GTH_SEARCH_RETRY_MAX_ATTEMPTS`: (Optional) Maximum retry attempts for failed item searches (`0` = retry indefinitely), default `5`.
+- `GTH_SEARCH_RETRY_INITIAL_DELAY_S`: (Optional) Initial delay before retrying a failed item search, default `60`.
+- `GTH_SEARCH_RETRY_BACKOFF_EXPONENT`: (Optional) Exponential backoff multiplier for failed-search retries, default `2.0`.
+- `GTH_SEARCH_RETRY_MAX_DELAY_S`: (Optional) Maximum delay between failed-search retries in seconds, default `86400` (24 hours).
+- `GTH_DRY_RUN`: (Optional) Test eligibility without actually searching, `true|false`, default `false`.
 - `GTH_INCLUDE_TAGS`: (Optional) Comma-separated list of tags. Items must have at least one matching tag, default empty (no filter).
 - `GTH_EXCLUDE_TAGS`: (Optional) Comma-separated list of tags. Items with any matching tag are excluded, default empty (no filter).
 - `GTH_MIN_MISSING_EPISODES`: (Optional) For Sonarr, minimum number of missing episodes required, default `0` (no threshold).
@@ -96,7 +105,9 @@ All global options may be overridden per target with `GTH_ARR_<n>_<OPTION>`:
 
 - `GTH_ARR_<n>_OPS_PER_INTERVAL`, `GTH_ARR_<n>_INTERVAL_S`, `GTH_ARR_<n>_ITEM_REVISIT_S`, `GTH_ARR_<n>_HTTP_TIMEOUT_S`
 - `GTH_ARR_<n>_REQUIRE_MONITORED`, `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`, `GTH_ARR_<n>_RELEASED_ONLY`
-- `GTH_ARR_<n>_SEARCH_BACKOFF_S`, `GTH_ARR_<n>_DRY_RUN`
+- `GTH_ARR_<n>_HTTP_MAX_RETRIES`, `GTH_ARR_<n>_HTTP_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_HTTP_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_HTTP_RETRY_MAX_DELAY_S`
+- `GTH_ARR_<n>_SEARCH_RETRY_MAX_ATTEMPTS`, `GTH_ARR_<n>_SEARCH_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_DELAY_S`
+- `GTH_ARR_<n>_DRY_RUN`
 - `GTH_ARR_<n>_INCLUDE_TAGS`, `GTH_ARR_<n>_EXCLUDE_TAGS`
 - `GTH_ARR_<n>_MIN_MISSING_EPISODES`, `GTH_ARR_<n>_MIN_MISSING_PERCENT`
 

@@ -7,7 +7,7 @@ import pytest
 
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType, TargetSettings
-from app.scheduler import Scheduler
+from app.scheduler import Scheduler, _search_backoff_delay_s
 from app.state import InMemoryStateStorage, ItemState, ItemStatus, RunStatus, StateManager
 
 if TYPE_CHECKING:
@@ -148,12 +148,15 @@ def create_target(
     "require_monitored",
     "require_cutoff_unmet",
     "released_only",
-    "search_backoff_s",
     "dry_run",
     "include_tags",
     "exclude_tags",
     "min_missing_episodes",
     "min_missing_percent",
+    "search_retry_max_attempts",
+    "search_retry_initial_delay_s",
+    "search_retry_backoff_exponent",
+    "search_retry_max_delay_s",
   }
   for field in settings_fields:
     if field in overrides:
@@ -179,6 +182,18 @@ def create_scheduler(
   # Fake clients are compatible with ArrClient interface for testing
   arr_clients: dict[str, ArrClient] = {target.name: fake_client}
   return Scheduler([target], state_manager, arr_clients)
+
+
+class TestSearchBackoffDelay:
+  def test_search_backoff_delay_exponential(self) -> None:
+    assert _search_backoff_delay_s(0, 60.0, 2.0, 86400.0) == 0.0
+    assert _search_backoff_delay_s(1, 60.0, 2.0, 86400.0) == 60.0
+    assert _search_backoff_delay_s(2, 60.0, 2.0, 86400.0) == 120.0
+    assert _search_backoff_delay_s(3, 60.0, 2.0, 86400.0) == 240.0
+    assert _search_backoff_delay_s(5, 60.0, 2.0, 86400.0) == 960.0
+
+  def test_search_backoff_delay_capped_by_max(self) -> None:
+    assert _search_backoff_delay_s(10, 60.0, 2.0, 100.0) == 100.0
 
 
 class TestScheduler:
@@ -307,7 +322,8 @@ class TestScheduler:
       "test-backoff",
       ArrType.RADARR,
       item_revisit_s=1,
-      search_backoff_s=3600,
+      search_retry_initial_delay_s=3600.0,
+      search_retry_max_attempts=10,
     )
     fake_client = FakeClientWithSearchError(target)
     scheduler = create_scheduler(target, state_manager, fake_client)
@@ -316,3 +332,27 @@ class TestScheduler:
     await scheduler.run_once(target)
 
     assert fake_client.search_movie_calls == 1
+
+  @pytest.mark.asyncio
+  async def test_run_once_skips_item_when_search_retry_max_attempts_exceeded(
+    self, state_manager: StateManager
+  ) -> None:
+    target = create_target(
+      "test-max-attempts",
+      ArrType.RADARR,
+      item_revisit_s=1,
+      search_retry_max_attempts=2,
+      search_retry_initial_delay_s=0.01,
+    )
+    fake_client = FakeClientWithSearchError(target)
+    scheduler = create_scheduler(target, state_manager, fake_client)
+
+    await scheduler.run_once(target)
+    time.sleep(0.02)
+    await scheduler.run_once(target)
+    time.sleep(0.02)
+    await scheduler.run_once(target)
+
+    assert fake_client.search_movie_calls == 2
+    target_state = state_manager.get_target_state("test-max-attempts")
+    assert target_state.items["1"].consecutive_failures == 2

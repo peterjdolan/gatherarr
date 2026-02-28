@@ -153,7 +153,7 @@ class TestLoadConfig:
     assert config.targets[0].settings.require_monitored is True
     assert config.targets[0].settings.require_cutoff_unmet is True
     assert config.targets[0].settings.released_only is False
-    assert config.targets[0].settings.search_backoff_s == 0
+    assert config.targets[0].settings.search_retry_initial_delay_s == 60.0
     assert config.targets[0].settings.dry_run is False
     assert config.targets[0].settings.include_tags == set()
     assert config.targets[0].settings.exclude_tags == set()
@@ -225,7 +225,7 @@ class TestLoadConfig:
       "GTH_REQUIRE_MONITORED": "false",
       "GTH_REQUIRE_CUTOFF_UNMET": "false",
       "GTH_RELEASED_ONLY": "true",
-      "GTH_SEARCH_BACKOFF_S": "60",
+      "GTH_SEARCH_RETRY_INITIAL_DELAY_S": "60",
       "GTH_DRY_RUN": "true",
       "GTH_INCLUDE_TAGS": "global_inc",
       "GTH_EXCLUDE_TAGS": "global_exc",
@@ -242,7 +242,7 @@ class TestLoadConfig:
       "GTH_ARR_0_REQUIRE_MONITORED": "true",
       "GTH_ARR_0_REQUIRE_CUTOFF_UNMET": "true",
       "GTH_ARR_0_RELEASED_ONLY": "false",
-      "GTH_ARR_0_SEARCH_BACKOFF_S": "120",
+      "GTH_ARR_0_SEARCH_RETRY_INITIAL_DELAY_S": "120",
       "GTH_ARR_0_DRY_RUN": "false",
       "GTH_ARR_0_INCLUDE_TAGS": "radarr_tag",
       "GTH_ARR_0_EXCLUDE_TAGS": "radarr_block",
@@ -261,7 +261,7 @@ class TestLoadConfig:
     assert config.require_monitored is False
     assert config.require_cutoff_unmet is False
     assert config.released_only is True
-    assert config.search_backoff_s == 60
+    assert config.search_retry_initial_delay_s == 60.0
     assert config.dry_run is True
     assert config.include_tags == "global_inc"
     assert config.exclude_tags == "global_exc"
@@ -275,7 +275,7 @@ class TestLoadConfig:
     assert t0.settings.require_monitored is True
     assert t0.settings.require_cutoff_unmet is True
     assert t0.settings.released_only is False
-    assert t0.settings.search_backoff_s == 120
+    assert t0.settings.search_retry_initial_delay_s == 120.0
     assert t0.settings.dry_run is False
     assert t0.settings.include_tags == {"radarr_tag"}
     assert t0.settings.exclude_tags == {"radarr_block"}
@@ -289,7 +289,7 @@ class TestLoadConfig:
     assert t1.settings.require_monitored is False
     assert t1.settings.require_cutoff_unmet is False
     assert t1.settings.released_only is True
-    assert t1.settings.search_backoff_s == 60
+    assert t1.settings.search_retry_initial_delay_s == 60.0
     assert t1.settings.dry_run is True
     assert t1.settings.include_tags == {"global_inc"}
     assert t1.settings.exclude_tags == {"global_exc"}
@@ -303,7 +303,7 @@ class TestLoadConfig:
       "GTH_REQUIRE_MONITORED": "false",
       "GTH_REQUIRE_CUTOFF_UNMET": "false",
       "GTH_RELEASED_ONLY": "true",
-      "GTH_SEARCH_BACKOFF_S": "120",
+      "GTH_SEARCH_RETRY_INITIAL_DELAY_S": "120",
       "GTH_DRY_RUN": "true",
       "GTH_INCLUDE_TAGS": "global_tag",
       "GTH_EXCLUDE_TAGS": "global_block",
@@ -316,7 +316,7 @@ class TestLoadConfig:
       "GTH_ARR_0_REQUIRE_MONITORED": "true",
       "GTH_ARR_0_REQUIRE_CUTOFF_UNMET": "true",
       "GTH_ARR_0_RELEASED_ONLY": "false",
-      "GTH_ARR_0_SEARCH_BACKOFF_S": "300",
+      "GTH_ARR_0_SEARCH_RETRY_INITIAL_DELAY_S": "300",
       "GTH_ARR_0_DRY_RUN": "false",
       "GTH_ARR_0_INCLUDE_TAGS": "anime, 4k, anime",
       "GTH_ARR_0_EXCLUDE_TAGS": "paused",
@@ -328,7 +328,7 @@ class TestLoadConfig:
     assert target.settings.require_monitored is True
     assert target.settings.require_cutoff_unmet is True
     assert target.settings.released_only is False
-    assert target.settings.search_backoff_s == 300
+    assert target.settings.search_retry_initial_delay_s == 300.0
     assert target.settings.dry_run is False
     assert target.settings.include_tags == {"anime", "4k"}
     assert target.settings.exclude_tags == {"paused"}
@@ -423,6 +423,36 @@ class TestLoadConfig:
     assert "Unrecognized GTH_* environment variables" in err_msg
     assert "GTH_UNKNOWN" in err_msg
     assert "GTH_ARR_0_TYPO" in err_msg
+
+  def test_load_config_retry_params_from_env(self) -> None:
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_HTTP_MAX_RETRIES": "5",
+      "GTH_HTTP_RETRY_INITIAL_DELAY_S": "2.0",
+      "GTH_HTTP_RETRY_BACKOFF_EXPONENT": "3.0",
+      "GTH_HTTP_RETRY_MAX_DELAY_S": "60.0",
+      "GTH_HTTP_TIMEOUT_S": "15.0",
+      "GTH_SEARCH_RETRY_MAX_ATTEMPTS": "10",
+      "GTH_SEARCH_RETRY_INITIAL_DELAY_S": "120.0",
+      "GTH_SEARCH_RETRY_BACKOFF_EXPONENT": "2.5",
+      "GTH_SEARCH_RETRY_MAX_DELAY_S": "43200.0",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "key",
+    }
+    config = load_config(env)
+    assert config.http_max_retries == 5
+    assert config.http_retry_initial_delay_s == 2.0
+    assert config.http_retry_backoff_exponent == 3.0
+    assert config.http_retry_max_delay_s == 60.0
+    assert config.http_timeout_s == 15.0
+    assert config.search_retry_max_attempts == 10
+    assert config.search_retry_initial_delay_s == 120.0
+    assert config.search_retry_backoff_exponent == 2.5
+    assert config.search_retry_max_delay_s == 43200.0
+    assert config.targets[0].settings.http_max_retries == 5
+    assert config.targets[0].settings.search_retry_initial_delay_s == 120.0
 
   def test_load_config_accepts_valid_gth_vars_only(self) -> None:
     env = {
@@ -812,7 +842,7 @@ class TestLoadConfigValidation:
       ("GTH_ARR_0_OPS_PER_INTERVAL", "0"),
       ("GTH_ARR_0_INTERVAL_S", "-1"),
       ("GTH_ARR_0_ITEM_REVISIT_S", "0"),
-      ("GTH_ARR_0_SEARCH_BACKOFF_S", "-1"),
+      ("GTH_ARR_0_SEARCH_RETRY_INITIAL_DELAY_S", "-1"),
     ],
   )
   def test_load_config_validates_arr_target_positive_integers(

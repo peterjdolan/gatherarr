@@ -25,6 +25,19 @@ from app.state import ItemState, ItemStatus, RunStatus, StateManager, TargetStat
 logger = structlog.get_logger()
 
 
+def _search_backoff_delay_s(
+  consecutive_failures: int,
+  initial_s: float,
+  exponent: float,
+  max_s: float,
+) -> float:
+  """Compute backoff delay before retrying a failed item (exponential backoff)."""
+  if consecutive_failures <= 0:
+    return 0.0
+  delay = initial_s * (exponent ** (consecutive_failures - 1))
+  return min(delay, max_s)
+
+
 class Scheduler:
   """Schedules and executes periodic search operations.
 
@@ -226,12 +239,32 @@ class Scheduler:
           )
           skips_total.labels(target=target.name, type=target.arr_type.value).inc()
           continue
-        if item_state.last_status != ItemStatus.SUCCESS and target.settings.search_backoff_s > 0:
-          if time_since_last < target.settings.search_backoff_s:
+        if item_state.last_status != ItemStatus.SUCCESS:
+          s = target.settings
+          if (
+            s.search_retry_max_attempts > 0
+            and item_state.consecutive_failures >= s.search_retry_max_attempts
+          ):
+            logger.debug(
+              "Skipping item (search retry max attempts exceeded)",
+              consecutive_failures=item_state.consecutive_failures,
+              search_retry_max_attempts=s.search_retry_max_attempts,
+              **item_logging_ids,
+            )
+            skips_total.labels(target=target.name, type=target.arr_type.value).inc()
+            continue
+          search_backoff_s = _search_backoff_delay_s(
+            item_state.consecutive_failures,
+            s.search_retry_initial_delay_s,
+            s.search_retry_backoff_exponent,
+            s.search_retry_max_delay_s,
+          )
+          if search_backoff_s > 0 and time_since_last < search_backoff_s:
             logger.debug(
               "Skipping item (search backoff not met)",
               time_since_last=time_since_last,
-              search_backoff_s=target.settings.search_backoff_s,
+              search_backoff_s=search_backoff_s,
+              consecutive_failures=item_state.consecutive_failures,
               **item_logging_ids,
             )
             skips_total.labels(target=target.name, type=target.arr_type.value).inc()
@@ -249,6 +282,7 @@ class Scheduler:
             last_processed_timestamp=dry_run_timestamp,
             last_result="dry_run_search_eligible",
             last_status=ItemStatus.SUCCESS,
+            consecutive_failures=0,
           )
         else:
           dry_run_state = replace(
@@ -256,6 +290,7 @@ class Scheduler:
             last_processed_timestamp=dry_run_timestamp,
             last_result="dry_run_search_eligible",
             last_status=ItemStatus.SUCCESS,
+            consecutive_failures=0,
           )
         target_state.items[item_id_str] = dry_run_state
         item_state = dry_run_state
@@ -291,6 +326,7 @@ class Scheduler:
             last_processed_timestamp=request_end,
             last_result="search_triggered",
             last_status=ItemStatus.SUCCESS,
+            consecutive_failures=0,
           )
         else:
           updated_state = replace(
@@ -298,6 +334,7 @@ class Scheduler:
             last_processed_timestamp=request_end,
             last_result="search_triggered",
             last_status=ItemStatus.SUCCESS,
+            consecutive_failures=0,
           )
         target_state.items[item_id_str] = updated_state
         item_state = updated_state
@@ -314,12 +351,14 @@ class Scheduler:
         )
       except Exception as e:
         error_timestamp = time.time()
+        new_failures = (item_state.consecutive_failures + 1) if item_state is not None else 1
         if item_state is None:
           failed_state = ItemState(
             item_id=item_id_str,
             last_processed_timestamp=error_timestamp,
             last_result="search_failed",
             last_status=ItemStatus.ERROR,
+            consecutive_failures=new_failures,
           )
         else:
           failed_state = replace(
@@ -327,6 +366,7 @@ class Scheduler:
             last_processed_timestamp=error_timestamp,
             last_result="search_failed",
             last_status=ItemStatus.ERROR,
+            consecutive_failures=new_failures,
           )
         target_state.items[item_id_str] = failed_state
         item_state = failed_state

@@ -22,16 +22,23 @@ _TARGET_OVERRIDE_ENV_MAP: tuple[tuple[str, str], ...] = (
   ("OPS_PER_INTERVAL", "ops_per_interval"),
   ("INTERVAL_S", "interval_s"),
   ("ITEM_REVISIT_S", "item_revisit_s"),
-  ("HTTP_TIMEOUT_S", "http_timeout_s"),
   ("REQUIRE_MONITORED", "require_monitored"),
   ("REQUIRE_CUTOFF_UNMET", "require_cutoff_unmet"),
   ("RELEASED_ONLY", "released_only"),
-  ("SEARCH_BACKOFF_S", "search_backoff_s"),
   ("DRY_RUN", "dry_run"),
   ("INCLUDE_TAGS", "include_tags"),
   ("EXCLUDE_TAGS", "exclude_tags"),
   ("MIN_MISSING_EPISODES", "min_missing_episodes"),
   ("MIN_MISSING_PERCENT", "min_missing_percent"),
+  ("HTTP_MAX_RETRIES", "http_max_retries"),
+  ("HTTP_RETRY_INITIAL_DELAY_S", "http_retry_initial_delay_s"),
+  ("HTTP_RETRY_BACKOFF_EXPONENT", "http_retry_backoff_exponent"),
+  ("HTTP_RETRY_MAX_DELAY_S", "http_retry_max_delay_s"),
+  ("HTTP_TIMEOUT_S", "http_timeout_s"),
+  ("SEARCH_RETRY_MAX_ATTEMPTS", "search_retry_max_attempts"),
+  ("SEARCH_RETRY_INITIAL_DELAY_S", "search_retry_initial_delay_s"),
+  ("SEARCH_RETRY_BACKOFF_EXPONENT", "search_retry_backoff_exponent"),
+  ("SEARCH_RETRY_MAX_DELAY_S", "search_retry_max_delay_s"),
 )
 
 
@@ -48,16 +55,23 @@ class TargetSettings(BaseModel):
   ops_per_interval: int = Field(ge=1)
   interval_s: int = Field(ge=1)
   item_revisit_s: int = Field(ge=1)
-  http_timeout_s: float = Field(default=30.0, ge=0.1)
   require_monitored: bool = True
   require_cutoff_unmet: bool = True
   released_only: bool = False
-  search_backoff_s: int = Field(default=0, ge=0)
   dry_run: bool = False
   include_tags: set[str] = Field(default_factory=set)
   exclude_tags: set[str] = Field(default_factory=set)
   min_missing_episodes: int = Field(default=0, ge=0)
   min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+  http_max_retries: int = Field(default=3, ge=0)
+  http_retry_initial_delay_s: float = Field(default=1.0, gt=0)
+  http_retry_backoff_exponent: float = Field(default=2.0, gt=0)
+  http_retry_max_delay_s: float = Field(default=30.0, gt=0)
+  http_timeout_s: float = Field(default=30.0, ge=0.1)
+  search_retry_max_attempts: int = Field(default=5, ge=0)
+  search_retry_initial_delay_s: float = Field(default=60.0, gt=0)
+  search_retry_backoff_exponent: float = Field(default=2.0, gt=0)
+  search_retry_max_delay_s: float = Field(default=86400.0, gt=0)
 
   @field_validator("include_tags", "exclude_tags", mode="before")
   @classmethod
@@ -130,9 +144,6 @@ def _build_target_settings(base_config: "Config", override_data: dict[str, str])
     item_revisit_s=_parse_int_override(
       override_data.get("item_revisit_s"), base_config.item_revisit_s
     ),
-    http_timeout_s=_parse_float_override(
-      override_data.get("http_timeout_s"), base_config.http_timeout_s
-    ),
     require_monitored=_parse_bool_override(
       override_data.get("require_monitored"), base_config.require_monitored
     ),
@@ -142,9 +153,6 @@ def _build_target_settings(base_config: "Config", override_data: dict[str, str])
     released_only=_parse_bool_override(
       override_data.get("released_only"), base_config.released_only
     ),
-    search_backoff_s=_parse_int_override(
-      override_data.get("search_backoff_s"), base_config.search_backoff_s
-    ),
     dry_run=_parse_bool_override(override_data.get("dry_run"), base_config.dry_run),
     include_tags=coerce_tag_set(include_tags_raw),
     exclude_tags=coerce_tag_set(exclude_tags_raw),
@@ -153,6 +161,33 @@ def _build_target_settings(base_config: "Config", override_data: dict[str, str])
     ),
     min_missing_percent=_parse_float_override(
       override_data.get("min_missing_percent"), base_config.min_missing_percent
+    ),
+    http_max_retries=_parse_int_override(
+      override_data.get("http_max_retries"), base_config.http_max_retries
+    ),
+    http_retry_initial_delay_s=_parse_float_override(
+      override_data.get("http_retry_initial_delay_s"), base_config.http_retry_initial_delay_s
+    ),
+    http_retry_backoff_exponent=_parse_float_override(
+      override_data.get("http_retry_backoff_exponent"), base_config.http_retry_backoff_exponent
+    ),
+    http_retry_max_delay_s=_parse_float_override(
+      override_data.get("http_retry_max_delay_s"), base_config.http_retry_max_delay_s
+    ),
+    http_timeout_s=_parse_float_override(
+      override_data.get("http_timeout_s"), base_config.http_timeout_s
+    ),
+    search_retry_max_attempts=_parse_int_override(
+      override_data.get("search_retry_max_attempts"), base_config.search_retry_max_attempts
+    ),
+    search_retry_initial_delay_s=_parse_float_override(
+      override_data.get("search_retry_initial_delay_s"), base_config.search_retry_initial_delay_s
+    ),
+    search_retry_backoff_exponent=_parse_float_override(
+      override_data.get("search_retry_backoff_exponent"), base_config.search_retry_backoff_exponent
+    ),
+    search_retry_max_delay_s=_parse_float_override(
+      override_data.get("search_retry_max_delay_s"), base_config.search_retry_max_delay_s
     ),
   )
 
@@ -218,12 +253,19 @@ class ArrTarget(BaseModel):
       ("require_monitored", lambda v: v),
       ("require_cutoff_unmet", lambda v: v),
       ("released_only", lambda v: v),
-      ("search_backoff_s", lambda v: v),
       ("dry_run", lambda v: v),
       ("include_tags", lambda v: sorted(v)),
       ("exclude_tags", lambda v: sorted(v)),
       ("min_missing_episodes", lambda v: v),
       ("min_missing_percent", lambda v: v),
+      ("http_max_retries", lambda v: v),
+      ("http_retry_initial_delay_s", lambda v: v),
+      ("http_retry_backoff_exponent", lambda v: v),
+      ("http_retry_max_delay_s", lambda v: v),
+      ("search_retry_max_attempts", lambda v: v),
+      ("search_retry_initial_delay_s", lambda v: v),
+      ("search_retry_backoff_exponent", lambda v: v),
+      ("search_retry_max_delay_s", lambda v: v),
     ]
 
     for attr, transformer in settings_attrs:
@@ -251,13 +293,20 @@ class Config(BaseSettings):
   require_monitored: bool = True
   require_cutoff_unmet: bool = True
   released_only: bool = False
-  search_backoff_s: int = Field(default=0, ge=0)
   dry_run: bool = False
   include_tags: str = ""
   exclude_tags: str = ""
   min_missing_episodes: int = Field(default=0, ge=0)
   min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+  http_max_retries: int = Field(default=3, ge=0)
+  http_retry_initial_delay_s: float = Field(default=1.0, gt=0)
+  http_retry_backoff_exponent: float = Field(default=2.0, gt=0)
+  http_retry_max_delay_s: float = Field(default=30.0, gt=0)
   http_timeout_s: float = Field(default=30.0, ge=0.1)
+  search_retry_max_attempts: int = Field(default=5, ge=0)
+  search_retry_initial_delay_s: float = Field(default=60.0, gt=0)
+  search_retry_backoff_exponent: float = Field(default=2.0, gt=0)
+  search_retry_max_delay_s: float = Field(default=86400.0, gt=0)
   shutdown_timeout_s: float = Field(default=30.0, ge=0.0)
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
 

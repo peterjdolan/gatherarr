@@ -72,7 +72,7 @@ The single entry point. Responsibilities:
 
 - **Loop:** Every 1 second, checks which targets are due (based on `interval_s` since last run). Runs due targets concurrently via `asyncio.gather`.
 - **Per-target run:** Fetches items via `ArrClient`, selects handler by target type (Radarr → MovieHandler, Sonarr → SeasonHandler), processes items via `ItemHandler` protocol.
-- **Revisit and backoff:** The Scheduler is responsible for deciding when an item should *not* be searched because it was processed recently. For each item it looks up `ItemState` (from `StateManager`) and applies: (1) **Success revisit** — if `last_status == SUCCESS` and `time_since_last < item_revisit_s`, skip; (2) **Failure backoff** — if `last_status != SUCCESS` and `search_backoff_s > 0` and `time_since_last < search_backoff_s`, skip. Handlers do not participate in revisit/backoff decisions.
+- **Revisit and backoff:** The Scheduler is responsible for deciding when an item should *not* be searched because it was processed recently. For each item it looks up `ItemState` (from `StateManager`) and applies: (1) **Success revisit** — if `last_status == SUCCESS` and `time_since_last < item_revisit_s`, skip; (2) **Failure backoff** — if `last_status != SUCCESS`, compute exponential backoff from `search_retry_initial_delay_s`, `search_retry_backoff_exponent`, `search_retry_max_delay_s` and `consecutive_failures`; skip if `time_since_last` is less than backoff; (3) **Max attempts** — if `search_retry_max_attempts > 0` and `consecutive_failures >= search_retry_max_attempts`, skip permanently. Handlers do not participate in revisit/backoff decisions.
 - **Item processing order:** Extract logging ID → extract item ID → state/backoff checks → eligibility (`should_search`) → search (or dry-run).
 - **Metrics:** Updates `run_total`, `grabs_total`, `skips_total`, `request_errors_total`, etc.
 - **State:** Persists after each run; increments `total_runs`.
@@ -106,7 +106,7 @@ Item identifiers extend `ItemId`:
 ### ArrClient (`app/arr_client.py`)
 
 - **HTTP layer:** Uses `HttpClient` protocol (injected; real impl: `HttpxClient`).
-- **Retries:** Tenacity for network errors, timeouts, 5xx, 429. Configurable max attempts, delay, backoff.
+- **Retries:** Tenacity for network errors, timeouts, 5xx, 429. Configurable `http_max_retries`, `http_retry_initial_delay_s`, `http_retry_backoff_exponent`, `http_retry_max_delay_s` (global and per-target).
 - **Auth:** `X-Api-Key` header per target.
 - **Endpoints:** Radarr `GET /api/v3/movie`, `POST /api/v3/command` (MoviesSearch); Sonarr `GET /api/v3/series`, flatten to seasons, `POST /api/v3/command` (SeasonSearch).
 
