@@ -51,19 +51,37 @@ Configuration is done by environment variables only. Docker Compose users are we
 
 Gatherarr will not start if any unrecognized environment variables beginning with `GTH_` are present. This helps detect typos (e.g. `GTH_ARR_0_TYPO` instead of `GTH_ARR_0_TYPE`) and obsolete configuration.
 
-### Global configuration
+### Base configuration
 
-- `GTH_LOG_LEVEL`: (Optional) log verbosity, `debug|info|warn|error`, default `info`.
-- `GTH_STATE_FILE_PATH`: (Optional) path to state persistence file, default `/data/state.yaml`.
-- `GTH_METRICS_ENABLED`: (Optional) Whether or not to host the metrics endpoint, `true|false`, default `false`.
-- `GTH_METRICS_ADDRESS`: (Optional) Metrics endpoint listen address, default `0.0.0.0`.
-- `GTH_METRICS_PORT`: (Optional) Metrics endpoint port, default `9090`.
+#### Per-target (required)
+
+- `GTH_ARR_<n>_TYPE`: `radarr|sonarr`.
+- `GTH_ARR_<n>_NAME`: Instance identifier for logging.
+- `GTH_ARR_<n>_BASEURL`: Base URL for the Radarr/Sonarr instance (e.g., `http://radarr:7878`).
+- `GTH_ARR_<n>_APIKEY`: API key for the instance.
+
+#### Global
+
+- `GTH_LOG_LEVEL`: (Optional) Log verbosity, `debug|info|warn|error`, default `info`.
+- `GTH_STATE_FILE_PATH`: (Optional) Path to state persistence file, default `/data/state.yaml`.
 - `GTH_OPS_PER_INTERVAL`: (Optional) Common number of operations to perform per interval time, default `1`.
 - `GTH_INTERVAL_S`: (Optional) Common interval duration in seconds, default `60`.
 - `GTH_ITEM_REVISIT_S`: (Optional) Minimum time in seconds to wait before reprocessing a previously successfully processed item, default `604800` (one week).
 - `GTH_HTTP_TIMEOUT_S`: (Optional) Timeout in seconds for all external HTTP calls to *arr APIs, default `30`.
 - `GTH_REQUIRE_MONITORED`: (Optional) Only search monitored items, `true|false`, default `true`.
 - `GTH_REQUIRE_CUTOFF_UNMET`: (Optional) Only search items that haven't met quality cutoff, `true|false`, default `true`.
+- `GTH_DRY_RUN`: (Optional) Test eligibility without actually searching, `true|false`, default `false`.
+
+### Advanced configuration
+
+#### Metrics
+
+- `GTH_METRICS_ENABLED`: (Optional) Whether or not to host the metrics endpoint, `true|false`, default `false`.
+- `GTH_METRICS_ADDRESS`: (Optional) Metrics endpoint listen address, default `0.0.0.0`.
+- `GTH_METRICS_PORT`: (Optional) Metrics endpoint port, default `9090`.
+
+#### Filtering and tuning
+
 - `GTH_RELEASED_ONLY`: (Optional) Only search items that have been released, `true|false`, default `false`.
 - `GTH_HTTP_MAX_RETRIES`: (Optional) Maximum HTTP retry attempts per request (network/5xx/429), default `3`.
 - `GTH_HTTP_RETRY_INITIAL_DELAY_S`: (Optional) Initial retry delay in seconds for HTTP requests, default `1.0`.
@@ -81,33 +99,17 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 - `GTH_MIN_MISSING_PERCENT`: (Optional) For Sonarr, minimum percentage of missing episodes required (0.0-100.0), default `0.0` (no threshold).
 - `GTH_SHUTDOWN_TIMEOUT_S`: (Optional) Seconds to wait for in-flight work to complete before forcing shutdown on SIGTERM/SIGINT. Default `30`. Use `0` for immediate cancellation.
 
-### Per-target configuration
+#### Per-target overrides
 
-- `GTH_ARR_<n>_TYPE`: (Required) `radarr|sonarr`.
-- `GTH_ARR_<n>_NAME`: (Required) instance identifier for logging.
-- `GTH_ARR_<n>_BASEURL`: (Required) base URL for the Radarr/Sonarr instance (e.g., `http://radarr:7878`).
-- `GTH_ARR_<n>_APIKEY`: (Required) API key for the instance.
-- `GTH_ARR_<n>_OPS_PER_INTERVAL`: (Optional) Override.
-- `GTH_ARR_<n>_INTERVAL_S`: (Optional) Override.
-- `GTH_ARR_<n>_ITEM_REVISIT_S`: (Optional) Override.
-- `GTH_ARR_<n>_HTTP_TIMEOUT_S`: (Optional) Override.
-- `GTH_ARR_<n>_REQUIRE_MONITORED`: (Optional) Override.
-- `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`: (Optional) Override.
-- `GTH_ARR_<n>_RELEASED_ONLY`: (Optional) Override.
-- `GTH_ARR_<n>_HTTP_MAX_RETRIES`: (Optional) Override.
-- `GTH_ARR_<n>_HTTP_RETRY_INITIAL_DELAY_S`: (Optional) Override.
-- `GTH_ARR_<n>_HTTP_RETRY_BACKOFF_EXPONENT`: (Optional) Override.
-- `GTH_ARR_<n>_HTTP_RETRY_MAX_DELAY_S`: (Optional) Override.
-- `GTH_ARR_<n>_HTTP_TIMEOUT_S`: (Optional) Override.
-- `GTH_ARR_<n>_SEARCH_RETRY_MAX_ATTEMPTS`: (Optional) Override.
-- `GTH_ARR_<n>_SEARCH_RETRY_INITIAL_DELAY_S`: (Optional) Override.
-- `GTH_ARR_<n>_SEARCH_RETRY_BACKOFF_EXPONENT`: (Optional) Override.
-- `GTH_ARR_<n>_SEARCH_RETRY_MAX_DELAY_S`: (Optional) Override.
-- `GTH_ARR_<n>_DRY_RUN`: (Optional) Override.
-- `GTH_ARR_<n>_INCLUDE_TAGS`: (Optional) Override.
-- `GTH_ARR_<n>_EXCLUDE_TAGS`: (Optional) Override.
-- `GTH_ARR_<n>_MIN_MISSING_EPISODES`: (Optional) Override.
-- `GTH_ARR_<n>_MIN_MISSING_PERCENT`: (Optional) Override.
+All global options may be overridden per target with `GTH_ARR_<n>_<OPTION>`:
+
+- `GTH_ARR_<n>_OPS_PER_INTERVAL`, `GTH_ARR_<n>_INTERVAL_S`, `GTH_ARR_<n>_ITEM_REVISIT_S`, `GTH_ARR_<n>_HTTP_TIMEOUT_S`
+- `GTH_ARR_<n>_REQUIRE_MONITORED`, `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`, `GTH_ARR_<n>_RELEASED_ONLY`
+- `GTH_ARR_<n>_HTTP_MAX_RETRIES`, `GTH_ARR_<n>_HTTP_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_HTTP_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_HTTP_RETRY_MAX_DELAY_S`
+- `GTH_ARR_<n>_SEARCH_RETRY_MAX_ATTEMPTS`, `GTH_ARR_<n>_SEARCH_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_DELAY_S`
+- `GTH_ARR_<n>_DRY_RUN`
+- `GTH_ARR_<n>_INCLUDE_TAGS`, `GTH_ARR_<n>_EXCLUDE_TAGS`
+- `GTH_ARR_<n>_MIN_MISSING_EPISODES`, `GTH_ARR_<n>_MIN_MISSING_PERCENT`
 
 ## Metrics
 
