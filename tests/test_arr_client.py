@@ -189,7 +189,7 @@ class TestArrClient:
     }
     fake_client = FakeHttpClient(errors=errors)
     target = radarr_target()
-    client = ArrClient(target, fake_client, max_retries=2)
+    client = ArrClient(target, fake_client, max_retries=1)
 
     with pytest.raises(httpx.RequestError):
       asyncio.run(client.get_movies({}))

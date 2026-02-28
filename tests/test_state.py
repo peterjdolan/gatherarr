@@ -37,6 +37,7 @@ class TestStateManagerSerialization:
         last_processed_timestamp=500.0,
         last_result="search_triggered",
         last_status=ItemStatus.SUCCESS,
+        consecutive_failures=0,
       )
       target_state.items["123"] = item_state
 
@@ -115,6 +116,63 @@ class TestStateManagerSerialization:
       data = yaml.safe_load(state_path.read_text())
       assert data["total_runs"] == 1
 
+  def test_load_state_with_consecutive_failures(self) -> None:
+    """Test that consecutive_failures is serialized and deserialized correctly."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+      state_path = Path(tmpdir) / "state.yaml"
+      state_path.write_text(
+        """total_runs: 1
+targets:
+  test-target:
+    last_run_timestamp: 1000.0
+    last_success_timestamp: 999.0
+    last_status: success
+    consecutive_failures: 0
+    items:
+      "42":
+        item_id: "42"
+        last_processed_timestamp: 500.0
+        last_result: search_failed
+        last_status: error
+        consecutive_failures: 3
+"""
+      )
+      storage = FileStateStorage(state_path)
+      manager = StateManager(storage)
+      manager.load()
+
+      target_state = manager.state.targets["test-target"]
+      assert "42" in target_state.items
+      assert target_state.items["42"].consecutive_failures == 3
+      assert target_state.items["42"].last_status == ItemStatus.ERROR
+
+  def test_load_state_without_consecutive_failures_uses_default(self) -> None:
+    """Test backward compatibility: old state without consecutive_failures defaults to 0."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+      state_path = Path(tmpdir) / "state.yaml"
+      state_path.write_text(
+        """total_runs: 1
+targets:
+  test-target:
+    last_run_timestamp: 1000.0
+    last_success_timestamp: 999.0
+    last_status: success
+    consecutive_failures: 0
+    items:
+      "42":
+        item_id: "42"
+        last_processed_timestamp: 500.0
+        last_result: search_failed
+        last_status: error
+"""
+      )
+      storage = FileStateStorage(state_path)
+      manager = StateManager(storage)
+      manager.load()
+
+      target_state = manager.state.targets["test-target"]
+      assert target_state.items["42"].consecutive_failures == 0
+
   def test_multiple_targets_serialization(self) -> None:
     """Test serialization with multiple targets."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -171,6 +229,7 @@ class TestStateManager:
       last_processed_timestamp=500.0,
       last_result="search_triggered",
       last_status=ItemStatus.SUCCESS,
+      consecutive_failures=0,
     )
     target_state.items["123"] = item_state
 

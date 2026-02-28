@@ -297,7 +297,7 @@ async def test_radarr_success_flow_with_real_http_stack() -> None:
         target=target,
         http_client=HttpxClient(async_http_client),
         max_retries=2,
-        retry_delay_s=0.01,
+        retry_initial_delay_s=0.01,
         timeout_s=0.5,
       )
 
@@ -344,7 +344,7 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
         target=target,
         http_client=HttpxClient(async_http_client),
         max_retries=2,
-        retry_delay_s=0.01,
+        retry_initial_delay_s=0.01,
         timeout_s=0.5,
       )
 
@@ -413,7 +413,7 @@ async def test_metrics_endpoint_exposes_target_metrics_after_scheduler_run(tmp_p
         target=target,
         http_client=HttpxClient(async_http_client),
         max_retries=2,
-        retry_delay_s=0.01,
+        retry_initial_delay_s=0.01,
         timeout_s=0.5,
       )
       scheduler = Scheduler([target], state_manager, {target.name: arr_client})
