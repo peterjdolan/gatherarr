@@ -54,6 +54,7 @@ The single entry point. Responsibilities:
 - **Target discovery:** Sequential indices `GTH_ARR_0_*`, `GTH_ARR_1_*`, … until `GTH_ARR_n_TYPE` is missing.
 - **Per-target overrides:** `TargetSettings` inherit from global defaults; overrides applied per index.
 - **Duplicate names:** PRD requires rejection of duplicate target names (validation in load).
+- **HTTP base URL warning:** When a target `base_url` uses `http://` instead of `https://`, log a warning at config load (API keys transmitted in cleartext over HTTP).
 
 **Design decision:** Reject unrecognized `GTH_*` variables to surface typos and obsolete config early.
 
