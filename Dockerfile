@@ -1,10 +1,10 @@
-# Builder stage
+FROM ghcr.io/astral-sh/uv:latest AS uv
 FROM dhi.io/python:3.14-dev AS builder
 
 WORKDIR /build
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=uv /uv /usr/local/bin/uv
 
 # Copy dependency files
 COPY pyproject.toml ./
@@ -38,3 +38,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD /app/.venv/bin/python -c "import urllib.request; urllib.request.urlopen('http://localhost:9090/health').read()" || exit 1
 
 CMD ["/app/.venv/bin/python", "-m", "app.main"]
+
