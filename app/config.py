@@ -22,6 +22,7 @@ _TARGET_OVERRIDE_ENV_MAP: tuple[tuple[str, str], ...] = (
   ("OPS_PER_INTERVAL", "ops_per_interval"),
   ("INTERVAL_S", "interval_s"),
   ("ITEM_REVISIT_S", "item_revisit_s"),
+  ("HTTP_TIMEOUT_S", "http_timeout_s"),
   ("REQUIRE_MONITORED", "require_monitored"),
   ("REQUIRE_CUTOFF_UNMET", "require_cutoff_unmet"),
   ("RELEASED_ONLY", "released_only"),
@@ -47,6 +48,7 @@ class TargetSettings(BaseModel):
   ops_per_interval: int = Field(ge=1)
   interval_s: int = Field(ge=1)
   item_revisit_s: int = Field(ge=1)
+  http_timeout_s: float = Field(default=30.0, ge=0.1)
   require_monitored: bool = True
   require_cutoff_unmet: bool = True
   released_only: bool = False
@@ -127,6 +129,9 @@ def _build_target_settings(base_config: "Config", override_data: dict[str, str])
     interval_s=_parse_int_override(override_data.get("interval_s"), base_config.interval_s),
     item_revisit_s=_parse_int_override(
       override_data.get("item_revisit_s"), base_config.item_revisit_s
+    ),
+    http_timeout_s=_parse_float_override(
+      override_data.get("http_timeout_s"), base_config.http_timeout_s
     ),
     require_monitored=_parse_bool_override(
       override_data.get("require_monitored"), base_config.require_monitored
@@ -209,6 +214,7 @@ class ArrTarget(BaseModel):
       ("ops_per_interval", lambda v: v),
       ("interval_s", lambda v: v),
       ("item_revisit_s", lambda v: v),
+      ("http_timeout_s", lambda v: v),
       ("require_monitored", lambda v: v),
       ("require_cutoff_unmet", lambda v: v),
       ("released_only", lambda v: v),
@@ -251,6 +257,7 @@ class Config(BaseSettings):
   exclude_tags: str = ""
   min_missing_episodes: int = Field(default=0, ge=0)
   min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+  http_timeout_s: float = Field(default=30.0, ge=0.1)
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
 
   @field_validator("log_level")

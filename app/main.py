@@ -113,6 +113,7 @@ async def main() -> None:
     arr_clients[target.name] = ArrClient(
       target=target,
       http_client=http_client,
+      timeout_s=target.settings.http_timeout_s,
     )
 
   scheduler = Scheduler(config.targets, state_manager, arr_clients)

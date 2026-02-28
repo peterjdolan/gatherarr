@@ -112,6 +112,7 @@ class TestLoadConfig:
     assert config.targets[0].arr_type == ArrType.RADARR
     assert config.targets[0].base_url == "http://localhost:7878"
     assert config.targets[0].api_key == "test-key"
+    assert config.targets[0].settings.http_timeout_s == 30.0
     assert config.targets[0].settings.require_monitored is True
     assert config.targets[0].settings.require_cutoff_unmet is True
     assert config.targets[0].settings.released_only is False
@@ -156,6 +157,26 @@ class TestLoadConfig:
       assert config.targets[0].settings.interval_s == 300
       assert config.targets[0].settings.item_revisit_s == 3600
 
+  def test_load_config_with_http_timeout_override(self) -> None:
+    """Test global and per-target HTTP timeout configuration."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_HTTP_TIMEOUT_S": "60",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr1:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_0_HTTP_TIMEOUT_S": "15",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "sonarr1",
+      "GTH_ARR_1_BASEURL": "http://sonarr1:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+    }
+    config = load_config(env)
+    assert config.http_timeout_s == 60.0
+    assert config.targets[0].settings.http_timeout_s == 15.0
+    assert config.targets[1].settings.http_timeout_s == 60.0
+
   def test_target_overrides_global_config_for_specific_target(self) -> None:
     """Verify GTH_ARR_<n>_* overrides apply to that target; others inherit global values."""
     env = {
@@ -172,6 +193,7 @@ class TestLoadConfig:
       "GTH_EXCLUDE_TAGS": "global_exc",
       "GTH_MIN_MISSING_EPISODES": "1",
       "GTH_MIN_MISSING_PERCENT": "10.0",
+      "GTH_HTTP_TIMEOUT_S": "45",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "radarr1",
       "GTH_ARR_0_BASEURL": "http://radarr1:7878",
@@ -188,6 +210,7 @@ class TestLoadConfig:
       "GTH_ARR_0_EXCLUDE_TAGS": "radarr_block",
       "GTH_ARR_0_MIN_MISSING_EPISODES": "5",
       "GTH_ARR_0_MIN_MISSING_PERCENT": "25.0",
+      "GTH_ARR_0_HTTP_TIMEOUT_S": "10",
       "GTH_ARR_1_TYPE": "sonarr",
       "GTH_ARR_1_NAME": "sonarr1",
       "GTH_ARR_1_BASEURL": "http://sonarr1:8989",
@@ -206,6 +229,7 @@ class TestLoadConfig:
     assert config.exclude_tags == "global_exc"
     assert config.min_missing_episodes == 1
     assert config.min_missing_percent == 10.0
+    assert config.http_timeout_s == 45.0
     t0 = config.targets[0]
     assert t0.settings.ops_per_interval == 7
     assert t0.settings.interval_s == 180
@@ -219,6 +243,7 @@ class TestLoadConfig:
     assert t0.settings.exclude_tags == {"radarr_block"}
     assert t0.settings.min_missing_episodes == 5
     assert t0.settings.min_missing_percent == 25.0
+    assert t0.settings.http_timeout_s == 10.0
     t1 = config.targets[1]
     assert t1.settings.ops_per_interval == 3
     assert t1.settings.interval_s == 90
@@ -232,6 +257,7 @@ class TestLoadConfig:
     assert t1.settings.exclude_tags == {"global_exc"}
     assert t1.settings.min_missing_episodes == 1
     assert t1.settings.min_missing_percent == 10.0
+    assert t1.settings.http_timeout_s == 45.0
 
   def test_load_config_with_eligibility_overrides(self) -> None:
     env = {
@@ -695,6 +721,19 @@ class TestLoadConfigValidation:
       "GTH_ARR_0_BASEURL": "http://localhost:8989",
       "GTH_ARR_0_APIKEY": "test-key",
       "GTH_ARR_0_MIN_MISSING_PERCENT": "101.0",
+    }
+    with pytest.raises(ValidationError):
+      load_config(env)
+
+  def test_load_config_validates_http_timeout_s_minimum(self) -> None:
+    """Test that http_timeout_s must be at least 0.1 seconds."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+      "GTH_ARR_0_HTTP_TIMEOUT_S": "0",
     }
     with pytest.raises(ValidationError):
       load_config(env)
