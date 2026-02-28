@@ -144,7 +144,7 @@ Unrecognized `GTH_*` variables cause startup failure. This avoids silent typos a
 - **HTTP retries:** Network errors, 5xx, 429 retried with exponential backoff. Non-retryable errors (e.g. 4xx) fail immediately.
 - **State corruption:** Recovered by moving corrupt file aside and starting fresh. No partial state loaded.
 - **Shutdown:** Scheduler stops; in-flight work completes or is cancelled. HTTP client closed cleanly.
-- **Graceful shutdown:** PRD v0.1 adds configurable `shutdown_timeout_s` to cap shutdown duration.
+- **Graceful shutdown:** Configurable `shutdown_timeout_s` (default 30s) caps shutdown duration. The scheduler is allowed to finish in-flight work; if it does not stop within the timeout, the task is cancelled.
 
 ## Testability
 
