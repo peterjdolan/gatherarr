@@ -112,7 +112,7 @@ When `GTH_METRICS_ENABLED` is `true`, Gatherarr exposes a Prometheus-compatible 
 
 - Trigger Radarr and Sonarr searches on a configurable schedule.
 - Support one or more Radarr/Sonarr instances.
-- Persist minimal operational state to a single YAML file, and gracefully recover when state is reset or corrupted.
+- Persist minimal operational state to a single YAML file, and gracefully recover when state is reset or corrupted. State file size is capped at 10 MB; when the limit would be exceeded, oldest item entries (by last processed timestamp) are pruned.
 - Expose Prometheus-compatible metrics endpoint.
 - Function properly when configured behind a firewall that limits outgoing network requests to only the configured *arr instances.
 

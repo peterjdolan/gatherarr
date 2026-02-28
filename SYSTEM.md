@@ -107,7 +107,7 @@ Item identifiers extend `ItemId`:
 - **Model:** `State` → `targets[name]` → `TargetState` → `items[item_id]` → `ItemState`.
 - **Persistence:** `StateStorage` protocol. `FileStateStorage` uses atomic write (temp file → fsync → rename).
 - **Corruption:** On YAML parse or deserialization error, move file to `.corrupt.<timestamp>`, start fresh.
-- **Size cap:** PRD specifies 10 MB cap; prune oldest item state when exceeded (planned).
+- **Size cap:** State file is capped at 10 MB. When the serialized state would exceed this limit, the oldest item entries (by `last_processed_timestamp`) are pruned until within cap.
 
 **Design decision:** Atomic write ensures no partial state on crash. Corrupt files are preserved for debugging.
 
