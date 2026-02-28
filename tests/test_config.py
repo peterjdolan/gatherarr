@@ -568,6 +568,7 @@ class TestHttpBaseUrlValidation:
     assert len(warning_events) == 1
     assert "cleartext" in warning_events[0].get("event", "")
     assert warning_events[0].get("target_name") == "radarr1"
+    assert warning_events[0].get("base_url") == "http://radarr:7878"
 
   def test_load_config_no_warning_when_base_url_uses_https(self) -> None:
     """When base_url uses https://, load_config does not log a warning."""

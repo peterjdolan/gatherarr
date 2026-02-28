@@ -392,6 +392,7 @@ def load_config(env: dict[str, str] | None = None) -> Config:
         "Target base_url uses HTTP; API key is transmitted in cleartext. Prefer HTTPS.",
         target_name=target.name,
         target_type=target.arr_type.value,
+        base_url=target.base_url,
       )
     logger.debug(
       "Target configuration created",

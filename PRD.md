@@ -217,7 +217,6 @@ For system architecture, design decisions, and implementation details, see [SYST
 
 **Architectural changes (readability, robustness, testability, security):**
 
-- **HTTP base URL validation:** At config load, warn when a target `base_url` uses `http://` instead of `https://`, since API keys are transmitted in cleartext over HTTP. Implemented: logs a warning per target at startup.
 - **Configuration schema documentation:** Document the full environment variable schema (names, types, defaults, per-target overrides) in README or a dedicated config reference so the source of truth is explicit and testable.
 
 ### v0.2 (Future)

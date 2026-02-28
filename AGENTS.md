@@ -96,7 +96,8 @@ Before suggesting code changes are complete:
 ## Additional Repository Guidance
 
 - Keep changes small and traceable to `PRD.md` requirements.
-- Updated `PRD.md` to document new features, assumptions, architectural changes, and design decisions.
+- **Remove milestone items from `PRD.md` as they are implemented** — do not leave implemented items in the planned/scope lists.
+- Update `PRD.md` to document new features, assumptions, architectural changes, and design decisions.
 - Update tests alongside behavior changes.
 - Prefer explicit, deterministic behavior over hidden defaults.
 - Preserve environment-variable-first configuration.
