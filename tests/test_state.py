@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 
 from app.state import (
+  STATE_SIZE_CAP_BYTES,
   FileStateStorage,
   InMemoryStateStorage,
   ItemState,
@@ -197,3 +198,90 @@ class TestStateManager:
     assert len(manager.state.targets) == 2
     assert manager.state.targets["target1"].last_run_timestamp == 100.0
     assert manager.state.targets["target2"].last_run_timestamp == 200.0
+
+
+class TestStateSizeCap:
+  """Tests for state size cap pruning."""
+
+  def test_no_pruning_when_under_cap(self) -> None:
+    """State under cap is not pruned."""
+    cap = 1024 * 1024  # 1 MB - plenty for a few items
+    storage = InMemoryStateStorage()
+    manager = StateManager(storage, state_size_cap_bytes=cap)
+
+    target = manager.get_target_state("target1")
+    for i in range(10):
+      target.items[str(i)] = ItemState(
+        item_id=str(i),
+        last_processed_timestamp=1000.0 + i,
+        last_result="ok",
+        last_status=ItemStatus.SUCCESS,
+      )
+
+    manager.save()
+
+    assert len(target.items) == 10
+
+  def test_prunes_oldest_items_when_over_cap(self) -> None:
+    """When state would exceed cap, oldest items (by last_processed_timestamp) are pruned."""
+    cap = 400  # Small cap to force pruning with few items
+    storage = InMemoryStateStorage()
+    manager = StateManager(storage, state_size_cap_bytes=cap)
+
+    target = manager.get_target_state("target1")
+    target.items["old"] = ItemState(
+      item_id="old",
+      last_processed_timestamp=100.0,  # Oldest
+      last_result="ok",
+      last_status=ItemStatus.SUCCESS,
+    )
+    target.items["middle"] = ItemState(
+      item_id="middle",
+      last_processed_timestamp=200.0,
+      last_result="ok",
+      last_status=ItemStatus.SUCCESS,
+    )
+    target.items["new"] = ItemState(
+      item_id="new",
+      last_processed_timestamp=300.0,  # Newest
+      last_result="ok",
+      last_status=ItemStatus.SUCCESS,
+    )
+
+    manager.save()
+
+    # Oldest should be pruned first; "old" may be pruned
+    assert "new" in target.items
+    assert "old" not in target.items
+
+  def test_pruning_persists_to_file(self) -> None:
+    """Pruned state is what gets written to disk."""
+    cap = 400
+    with tempfile.TemporaryDirectory() as tmpdir:
+      state_path = Path(tmpdir) / "state.yaml"
+      storage = FileStateStorage(state_path)
+      manager = StateManager(storage, state_size_cap_bytes=cap)
+
+      target = manager.get_target_state("target1")
+      for i in range(20):
+        target.items[str(i)] = ItemState(
+          item_id=str(i),
+          last_processed_timestamp=100.0 + i,  # Lower i = older
+          last_result="ok",
+          last_status=ItemStatus.SUCCESS,
+        )
+
+      manager.save()
+
+      written = state_path.read_text()
+      assert len(written.encode("utf-8")) <= cap
+      data = yaml.safe_load(written)
+      item_count = len(data["targets"]["target1"]["items"])
+      assert item_count < 20
+
+  def test_default_cap_is_10_mb(self) -> None:
+    """Default state size cap is 10 MB."""
+    storage = InMemoryStateStorage()
+    manager = StateManager(storage)
+    assert manager.state_size_cap_bytes == STATE_SIZE_CAP_BYTES
+    assert STATE_SIZE_CAP_BYTES == 10 * 1024 * 1024
