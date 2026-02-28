@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from structlog.testing import capture_logs
 
 from app.config import (
   ArrTarget,
@@ -545,6 +546,85 @@ class TestArrTarget:
     assert "api_key" not in logging_tags
     assert logging_tags["include_tags"] == ["a", "b"]
     assert logging_tags["exclude_tags"] == ["z"]
+
+
+class TestHttpBaseUrlValidation:
+  """Tests for HTTP base URL validation (v0.1 code health)."""
+
+  def test_load_config_warns_when_base_url_uses_http(self) -> None:
+    """When base_url uses http://, load_config logs a warning about cleartext API key."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    with capture_logs() as cap:
+      config = load_config(env)
+    assert len(config.targets) == 1
+    assert config.targets[0].base_url == "http://radarr:7878"
+    warning_events = [e for e in cap if e.get("log_level") == "warning"]
+    assert len(warning_events) == 1
+    assert "cleartext" in warning_events[0].get("event", "")
+    assert warning_events[0].get("target_name") == "radarr1"
+
+  def test_load_config_no_warning_when_base_url_uses_https(self) -> None:
+    """When base_url uses https://, load_config does not log a warning."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "https://radarr.example.com:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    with capture_logs() as cap:
+      config = load_config(env)
+    assert len(config.targets) == 1
+    assert config.targets[0].base_url == "https://radarr.example.com:7878"
+    warning_events = [e for e in cap if e.get("log_level") == "warning"]
+    assert len(warning_events) == 0
+
+  def test_load_config_warns_for_each_http_target(self) -> None:
+    """When multiple targets use http://, load_config logs a warning for each."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "sonarr1",
+      "GTH_ARR_1_BASEURL": "http://sonarr:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+    }
+    with capture_logs() as cap:
+      config = load_config(env)
+    assert len(config.targets) == 2
+    warning_events = [e for e in cap if e.get("log_level") == "warning"]
+    assert len(warning_events) == 2
+    target_names = {e.get("target_name") for e in warning_events}
+    assert target_names == {"radarr1", "sonarr1"}
+
+  def test_load_config_warns_only_for_http_not_https(self) -> None:
+    """When one target uses http and another https, only http target gets a warning."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "sonarr1",
+      "GTH_ARR_1_BASEURL": "https://sonarr.example.com:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+    }
+    with capture_logs() as cap:
+      config = load_config(env)
+    assert len(config.targets) == 2
+    warning_events = [e for e in cap if e.get("log_level") == "warning"]
+    assert len(warning_events) == 1
+    assert warning_events[0].get("target_name") == "radarr1"
 
 
 class TestConfigValidation:

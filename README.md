@@ -128,7 +128,7 @@ When `GTH_METRICS_ENABLED` is `true`, Gatherarr exposes a Prometheus-compatible 
 - **Hardened Docker Image**: Gatherarr uses a hardened Python 3.14 Docker image from Docker Hardened Images (DHI) for enhanced security. The hardened image provides additional security hardening, minimal attack surface, and follows security best practices. Vulnerability scan results for published images are available on the [Docker Hub image page](https://hub.docker.com/r/astrocatcmdr/gatherarr).
 - `API_KEY` values are redacted from structured log statements and emitted as `[REDACTED]`.
 - Gatherarr serves `/metrics` without built-in authentication when metrics are enabled. If authentication is required, place Gatherarr behind an external authentication or authorization layer (for example, a reverse proxy with auth controls) and/or network-level access controls.
-- Gatherarr sends `X-Api-Key` to each configured `*arr` target. If `GTH_ARR_<n>_BASEURL` uses `http://` instead of `https://`, that API key is transmitted in cleartext over the network.
+- Gatherarr sends `X-Api-Key` to each configured `*arr` target. If `GTH_ARR_<n>_BASEURL` uses `http://` instead of `https://`, that API key is transmitted in cleartext over the network. At startup, Gatherarr logs a warning for each target using HTTP.
 - A firewall may be used to limit outgoing network requests to only the configured *arr application URLs.
 
 ## Development
