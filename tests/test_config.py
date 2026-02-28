@@ -99,15 +99,51 @@ class TestLogLevelParsing:
     assert config.log_level == "INFO"
 
 
-class TestLoadConfig:
-  def test_load_minimal_config(self) -> None:
+class TestShutdownTimeout:
+  def test_default_shutdown_timeout(self) -> None:
+    """Test that default shutdown_timeout_s is 30."""
+    config = Config(state_file_path=None)
+    assert config.shutdown_timeout_s == 30.0
+
+  def test_shutdown_timeout_from_env(self) -> None:
+    """Test shutdown_timeout_s can be set via GTH_SHUTDOWN_TIMEOUT_S."""
     env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_SHUTDOWN_TIMEOUT_S": "60",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
       "GTH_ARR_0_APIKEY": "test-key",
     }
     config = load_config(env)
+    assert config.shutdown_timeout_s == 60.0
+
+  def test_shutdown_timeout_zero_allowed(self) -> None:
+    """Test shutdown_timeout_s of 0 is allowed for immediate cancel."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_SHUTDOWN_TIMEOUT_S": "0",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    config = load_config(env)
+    assert config.shutdown_timeout_s == 0.0
+
+
+class TestLoadConfig:
+  def test_load_minimal_config(self) -> None:
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_SHUTDOWN_TIMEOUT_S": "30",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    config = load_config(env)
+    assert config.state_file_path is None
     assert len(config.targets) == 1
     assert config.targets[0].name == "test"
     assert config.targets[0].arr_type == ArrType.RADARR
@@ -125,6 +161,7 @@ class TestLoadConfig:
     assert config.log_level == "INFO"
     assert config.metrics_enabled is True
     assert config.metrics_port == 9090
+    assert config.shutdown_timeout_s == 30.0
 
   def test_load_config_with_overrides(self) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:

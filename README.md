@@ -70,6 +70,7 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 - `GTH_EXCLUDE_TAGS`: (Optional) Comma-separated list of tags. Items with any matching tag are excluded, default empty (no filter).
 - `GTH_MIN_MISSING_EPISODES`: (Optional) For Sonarr, minimum number of missing episodes required, default `0` (no threshold).
 - `GTH_MIN_MISSING_PERCENT`: (Optional) For Sonarr, minimum percentage of missing episodes required (0.0-100.0), default `0.0` (no threshold).
+- `GTH_SHUTDOWN_TIMEOUT_S`: (Optional) Seconds to wait for in-flight work to complete before forcing shutdown on SIGTERM/SIGINT. Default `30`. Use `0` for immediate cancellation.
 
 ### Per-target configuration
 

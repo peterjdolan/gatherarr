@@ -251,6 +251,7 @@ class Config(BaseSettings):
   exclude_tags: str = ""
   min_missing_episodes: int = Field(default=0, ge=0)
   min_missing_percent: float = Field(default=0.0, ge=0.0, le=100.0)
+  shutdown_timeout_s: float = Field(default=30.0, ge=0.0)
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
 
   @field_validator("log_level")

@@ -139,16 +139,27 @@ async def main() -> None:
   except KeyboardInterrupt:
     pass
   finally:
-    logger.debug("Shutting down...")
+    logger.debug(
+      "Shutting down...",
+      shutdown_timeout_s=config.shutdown_timeout_s,
+    )
     logger.debug("Stopping scheduler")
     scheduler.stop()
-    logger.debug("Cancelling scheduler task")
-    scheduler_task.cancel()
     try:
-      await scheduler_task
+      await asyncio.wait_for(scheduler_task, timeout=config.shutdown_timeout_s)
+      logger.debug("Scheduler stopped gracefully")
+    except asyncio.TimeoutError:
+      logger.debug(
+        "Scheduler did not stop within timeout, cancelling",
+        shutdown_timeout_s=config.shutdown_timeout_s,
+      )
+      scheduler_task.cancel()
+      try:
+        await scheduler_task
+      except asyncio.CancelledError:
+        logger.debug("Scheduler task cancelled")
     except asyncio.CancelledError:
       logger.debug("Scheduler task cancelled")
-      pass
 
     logger.debug("Closing HTTP client")
     await http_client_instance.aclose()
