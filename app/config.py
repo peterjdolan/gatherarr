@@ -67,7 +67,7 @@ class TargetSettings(BaseModel):
   http_retry_initial_delay_s: float = Field(default=1.0, gt=0)
   http_retry_backoff_exponent: float = Field(default=2.0, gt=0)
   http_retry_max_delay_s: float = Field(default=30.0, gt=0)
-  http_timeout_s: float = Field(default=30.0, gt=0)
+  http_timeout_s: float = Field(default=30.0, ge=0.1)
   search_retry_max_attempts: int = Field(default=5, ge=0)
   search_retry_initial_delay_s: float = Field(default=60.0, gt=0)
   search_retry_backoff_exponent: float = Field(default=2.0, gt=0)
@@ -249,6 +249,7 @@ class ArrTarget(BaseModel):
       ("ops_per_interval", lambda v: v),
       ("interval_s", lambda v: v),
       ("item_revisit_s", lambda v: v),
+      ("http_timeout_s", lambda v: v),
       ("require_monitored", lambda v: v),
       ("require_cutoff_unmet", lambda v: v),
       ("released_only", lambda v: v),
@@ -261,7 +262,6 @@ class ArrTarget(BaseModel):
       ("http_retry_initial_delay_s", lambda v: v),
       ("http_retry_backoff_exponent", lambda v: v),
       ("http_retry_max_delay_s", lambda v: v),
-      ("http_timeout_s", lambda v: v),
       ("search_retry_max_attempts", lambda v: v),
       ("search_retry_initial_delay_s", lambda v: v),
       ("search_retry_backoff_exponent", lambda v: v),
@@ -302,11 +302,12 @@ class Config(BaseSettings):
   http_retry_initial_delay_s: float = Field(default=1.0, gt=0)
   http_retry_backoff_exponent: float = Field(default=2.0, gt=0)
   http_retry_max_delay_s: float = Field(default=30.0, gt=0)
-  http_timeout_s: float = Field(default=30.0, gt=0)
+  http_timeout_s: float = Field(default=30.0, ge=0.1)
   search_retry_max_attempts: int = Field(default=5, ge=0)
   search_retry_initial_delay_s: float = Field(default=60.0, gt=0)
   search_retry_backoff_exponent: float = Field(default=2.0, gt=0)
   search_retry_max_delay_s: float = Field(default=86400.0, gt=0)
+  shutdown_timeout_s: float = Field(default=30.0, ge=0.0)
   targets: list[ArrTarget] = Field(default_factory=list, exclude=True)
 
   @field_validator("log_level")
@@ -442,6 +443,14 @@ def load_config(env: dict[str, str] | None = None) -> Config:
       api_key=env_dict[apikey_key],
       settings=resolved_settings,
     )
+    parsed_url = urlparse(target.base_url)
+    if parsed_url.scheme == "http":
+      logger.warning(
+        "Target base_url uses HTTP; API key is transmitted in cleartext. Prefer HTTPS.",
+        target_name=target.name,
+        target_type=target.arr_type.value,
+        base_url=target.base_url,
+      )
     logger.debug(
       "Target configuration created",
       index=n,

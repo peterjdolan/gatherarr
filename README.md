@@ -61,6 +61,7 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 - `GTH_OPS_PER_INTERVAL`: (Optional) Common number of operations to perform per interval time, default `1`.
 - `GTH_INTERVAL_S`: (Optional) Common interval duration in seconds, default `60`.
 - `GTH_ITEM_REVISIT_S`: (Optional) Minimum time in seconds to wait before reprocessing a previously successfully processed item, default `604800` (one week).
+- `GTH_HTTP_TIMEOUT_S`: (Optional) Timeout in seconds for all external HTTP calls to *arr APIs, default `30`.
 - `GTH_REQUIRE_MONITORED`: (Optional) Only search monitored items, `true|false`, default `true`.
 - `GTH_REQUIRE_CUTOFF_UNMET`: (Optional) Only search items that haven't met quality cutoff, `true|false`, default `true`.
 - `GTH_RELEASED_ONLY`: (Optional) Only search items that have been released, `true|false`, default `false`.
@@ -78,6 +79,7 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 - `GTH_EXCLUDE_TAGS`: (Optional) Comma-separated list of tags. Items with any matching tag are excluded, default empty (no filter).
 - `GTH_MIN_MISSING_EPISODES`: (Optional) For Sonarr, minimum number of missing episodes required, default `0` (no threshold).
 - `GTH_MIN_MISSING_PERCENT`: (Optional) For Sonarr, minimum percentage of missing episodes required (0.0-100.0), default `0.0` (no threshold).
+- `GTH_SHUTDOWN_TIMEOUT_S`: (Optional) Seconds to wait for in-flight work to complete before forcing shutdown on SIGTERM/SIGINT. Default `30`. Use `0` for immediate cancellation.
 
 ### Per-target configuration
 
@@ -88,6 +90,7 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 - `GTH_ARR_<n>_OPS_PER_INTERVAL`: (Optional) Override.
 - `GTH_ARR_<n>_INTERVAL_S`: (Optional) Override.
 - `GTH_ARR_<n>_ITEM_REVISIT_S`: (Optional) Override.
+- `GTH_ARR_<n>_HTTP_TIMEOUT_S`: (Optional) Override.
 - `GTH_ARR_<n>_REQUIRE_MONITORED`: (Optional) Override.
 - `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`: (Optional) Override.
 - `GTH_ARR_<n>_RELEASED_ONLY`: (Optional) Override.
@@ -127,7 +130,7 @@ When `GTH_METRICS_ENABLED` is `true`, Gatherarr exposes a Prometheus-compatible 
 
 - Trigger Radarr and Sonarr searches on a configurable schedule.
 - Support one or more Radarr/Sonarr instances.
-- Persist minimal operational state to a single YAML file, and gracefully recover when state is reset or corrupted.
+- Persist minimal operational state to a single YAML file, and gracefully recover when state is reset or corrupted. State file size is capped at 10 MB; when the limit would be exceeded, oldest item entries (by last processed timestamp) are pruned.
 - Expose Prometheus-compatible metrics endpoint.
 - Function properly when configured behind a firewall that limits outgoing network requests to only the configured *arr instances.
 
@@ -144,7 +147,7 @@ When `GTH_METRICS_ENABLED` is `true`, Gatherarr exposes a Prometheus-compatible 
 - **Hardened Docker Image**: Gatherarr uses a hardened Python 3.14 Docker image from Docker Hardened Images (DHI) for enhanced security. The hardened image provides additional security hardening, minimal attack surface, and follows security best practices. Vulnerability scan results for published images are available on the [Docker Hub image page](https://hub.docker.com/r/astrocatcmdr/gatherarr).
 - `API_KEY` values are redacted from structured log statements and emitted as `[REDACTED]`.
 - Gatherarr serves `/metrics` without built-in authentication when metrics are enabled. If authentication is required, place Gatherarr behind an external authentication or authorization layer (for example, a reverse proxy with auth controls) and/or network-level access controls.
-- Gatherarr sends `X-Api-Key` to each configured `*arr` target. If `GTH_ARR_<n>_BASEURL` uses `http://` instead of `https://`, that API key is transmitted in cleartext over the network.
+- Gatherarr sends `X-Api-Key` to each configured `*arr` target. If `GTH_ARR_<n>_BASEURL` uses `http://` instead of `https://`, that API key is transmitted in cleartext over the network. At startup, Gatherarr logs a warning for each target using HTTP.
 - A firewall may be used to limit outgoing network requests to only the configured *arr application URLs.
 
 ## Development

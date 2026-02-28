@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from structlog.testing import capture_logs
 
 from app.config import (
   ArrTarget,
@@ -98,20 +99,57 @@ class TestLogLevelParsing:
     assert config.log_level == "INFO"
 
 
-class TestLoadConfig:
-  def test_load_minimal_config(self) -> None:
+class TestShutdownTimeout:
+  def test_default_shutdown_timeout(self) -> None:
+    """Test that default shutdown_timeout_s is 30."""
+    config = Config(state_file_path=None)
+    assert config.shutdown_timeout_s == 30.0
+
+  def test_shutdown_timeout_from_env(self) -> None:
+    """Test shutdown_timeout_s can be set via GTH_SHUTDOWN_TIMEOUT_S."""
     env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_SHUTDOWN_TIMEOUT_S": "60",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
       "GTH_ARR_0_APIKEY": "test-key",
     }
     config = load_config(env)
+    assert config.shutdown_timeout_s == 60.0
+
+  def test_shutdown_timeout_zero_allowed(self) -> None:
+    """Test shutdown_timeout_s of 0 is allowed for immediate cancel."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_SHUTDOWN_TIMEOUT_S": "0",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    config = load_config(env)
+    assert config.shutdown_timeout_s == 0.0
+
+
+class TestLoadConfig:
+  def test_load_minimal_config(self) -> None:
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_SHUTDOWN_TIMEOUT_S": "30",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    config = load_config(env)
+    assert config.state_file_path is None
     assert len(config.targets) == 1
     assert config.targets[0].name == "test"
     assert config.targets[0].arr_type == ArrType.RADARR
     assert config.targets[0].base_url == "http://localhost:7878"
     assert config.targets[0].api_key == "test-key"
+    assert config.targets[0].settings.http_timeout_s == 30.0
     assert config.targets[0].settings.require_monitored is True
     assert config.targets[0].settings.require_cutoff_unmet is True
     assert config.targets[0].settings.released_only is False
@@ -124,6 +162,7 @@ class TestLoadConfig:
     assert config.log_level == "INFO"
     assert config.metrics_enabled is True
     assert config.metrics_port == 9090
+    assert config.shutdown_timeout_s == 30.0
 
   def test_load_config_with_overrides(self) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -156,6 +195,26 @@ class TestLoadConfig:
       assert config.targets[0].settings.interval_s == 300
       assert config.targets[0].settings.item_revisit_s == 3600
 
+  def test_load_config_with_http_timeout_override(self) -> None:
+    """Test global and per-target HTTP timeout configuration."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_HTTP_TIMEOUT_S": "60",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr1:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_0_HTTP_TIMEOUT_S": "15",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "sonarr1",
+      "GTH_ARR_1_BASEURL": "http://sonarr1:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+    }
+    config = load_config(env)
+    assert config.http_timeout_s == 60.0
+    assert config.targets[0].settings.http_timeout_s == 15.0
+    assert config.targets[1].settings.http_timeout_s == 60.0
+
   def test_target_overrides_global_config_for_specific_target(self) -> None:
     """Verify GTH_ARR_<n>_* overrides apply to that target; others inherit global values."""
     env = {
@@ -172,6 +231,7 @@ class TestLoadConfig:
       "GTH_EXCLUDE_TAGS": "global_exc",
       "GTH_MIN_MISSING_EPISODES": "1",
       "GTH_MIN_MISSING_PERCENT": "10.0",
+      "GTH_HTTP_TIMEOUT_S": "45",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "radarr1",
       "GTH_ARR_0_BASEURL": "http://radarr1:7878",
@@ -188,6 +248,7 @@ class TestLoadConfig:
       "GTH_ARR_0_EXCLUDE_TAGS": "radarr_block",
       "GTH_ARR_0_MIN_MISSING_EPISODES": "5",
       "GTH_ARR_0_MIN_MISSING_PERCENT": "25.0",
+      "GTH_ARR_0_HTTP_TIMEOUT_S": "10",
       "GTH_ARR_1_TYPE": "sonarr",
       "GTH_ARR_1_NAME": "sonarr1",
       "GTH_ARR_1_BASEURL": "http://sonarr1:8989",
@@ -206,6 +267,7 @@ class TestLoadConfig:
     assert config.exclude_tags == "global_exc"
     assert config.min_missing_episodes == 1
     assert config.min_missing_percent == 10.0
+    assert config.http_timeout_s == 45.0
     t0 = config.targets[0]
     assert t0.settings.ops_per_interval == 7
     assert t0.settings.interval_s == 180
@@ -219,6 +281,7 @@ class TestLoadConfig:
     assert t0.settings.exclude_tags == {"radarr_block"}
     assert t0.settings.min_missing_episodes == 5
     assert t0.settings.min_missing_percent == 25.0
+    assert t0.settings.http_timeout_s == 10.0
     t1 = config.targets[1]
     assert t1.settings.ops_per_interval == 3
     assert t1.settings.interval_s == 90
@@ -232,6 +295,7 @@ class TestLoadConfig:
     assert t1.settings.exclude_tags == {"global_exc"}
     assert t1.settings.min_missing_episodes == 1
     assert t1.settings.min_missing_percent == 10.0
+    assert t1.settings.http_timeout_s == 45.0
 
   def test_load_config_with_eligibility_overrides(self) -> None:
     env = {
@@ -577,6 +641,86 @@ class TestArrTarget:
     assert logging_tags["exclude_tags"] == ["z"]
 
 
+class TestHttpBaseUrlValidation:
+  """Tests for HTTP base URL validation (v0.1 code health)."""
+
+  def test_load_config_warns_when_base_url_uses_http(self) -> None:
+    """When base_url uses http://, load_config logs a warning about cleartext API key."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    with capture_logs() as cap:
+      config = load_config(env)
+    assert len(config.targets) == 1
+    assert config.targets[0].base_url == "http://radarr:7878"
+    warning_events = [e for e in cap if e.get("log_level") == "warning"]
+    assert len(warning_events) == 1
+    assert "cleartext" in warning_events[0].get("event", "")
+    assert warning_events[0].get("target_name") == "radarr1"
+    assert warning_events[0].get("base_url") == "http://radarr:7878"
+
+  def test_load_config_no_warning_when_base_url_uses_https(self) -> None:
+    """When base_url uses https://, load_config does not log a warning."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "https://radarr.example.com:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+    }
+    with capture_logs() as cap:
+      config = load_config(env)
+    assert len(config.targets) == 1
+    assert config.targets[0].base_url == "https://radarr.example.com:7878"
+    warning_events = [e for e in cap if e.get("log_level") == "warning"]
+    assert len(warning_events) == 0
+
+  def test_load_config_warns_for_each_http_target(self) -> None:
+    """When multiple targets use http://, load_config logs a warning for each."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "sonarr1",
+      "GTH_ARR_1_BASEURL": "http://sonarr:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+    }
+    with capture_logs() as cap:
+      config = load_config(env)
+    assert len(config.targets) == 2
+    warning_events = [e for e in cap if e.get("log_level") == "warning"]
+    assert len(warning_events) == 2
+    target_names = {e.get("target_name") for e in warning_events}
+    assert target_names == {"radarr1", "sonarr1"}
+
+  def test_load_config_warns_only_for_http_not_https(self) -> None:
+    """When one target uses http and another https, only http target gets a warning."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "radarr1",
+      "GTH_ARR_0_BASEURL": "http://radarr:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "sonarr1",
+      "GTH_ARR_1_BASEURL": "https://sonarr.example.com:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+    }
+    with capture_logs() as cap:
+      config = load_config(env)
+    assert len(config.targets) == 2
+    warning_events = [e for e in cap if e.get("log_level") == "warning"]
+    assert len(warning_events) == 1
+    assert warning_events[0].get("target_name") == "radarr1"
+
+
 class TestConfigValidation:
   def test_config_validates_state_file_path_writable(self) -> None:
     """Test that Config validates state_file_path is writable."""
@@ -725,6 +869,19 @@ class TestLoadConfigValidation:
       "GTH_ARR_0_BASEURL": "http://localhost:8989",
       "GTH_ARR_0_APIKEY": "test-key",
       "GTH_ARR_0_MIN_MISSING_PERCENT": "101.0",
+    }
+    with pytest.raises(ValidationError):
+      load_config(env)
+
+  def test_load_config_validates_http_timeout_s_minimum(self) -> None:
+    """Test that http_timeout_s must be at least 0.1 seconds."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "test",
+      "GTH_ARR_0_BASEURL": "http://localhost:7878",
+      "GTH_ARR_0_APIKEY": "test-key",
+      "GTH_ARR_0_HTTP_TIMEOUT_S": "0",
     }
     with pytest.raises(ValidationError):
       load_config(env)

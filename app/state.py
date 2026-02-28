@@ -12,6 +12,8 @@ import yaml
 
 logger = structlog.get_logger()
 
+STATE_SIZE_CAP_BYTES = 10 * 1024 * 1024  # 10 MB
+
 
 class RunStatus(StrEnum):
   """Status of a run."""
@@ -219,8 +221,13 @@ class InMemoryStateStorage:
 class StateManager:
   """Manages application state with atomic writes."""
 
-  def __init__(self, storage: StateStorage) -> None:
+  def __init__(
+    self,
+    storage: StateStorage,
+    state_size_cap_bytes: int = STATE_SIZE_CAP_BYTES,
+  ) -> None:
     self.storage = storage
+    self.state_size_cap_bytes = state_size_cap_bytes
     self.state = State()
 
   def load(self) -> None:
@@ -301,10 +308,45 @@ class StateManager:
       "Saving state",
       **self.state.logging_ids(),
     )
+    self._prune_if_over_cap()
     data = self._serialize()
     logger.debug("State serialized, writing to storage")
     self.storage.write(data)
     logger.debug("State saved successfully")
+
+  def _prune_if_over_cap(self) -> None:
+    """Prune oldest item state entries when state would exceed the size cap."""
+    data = self._serialize()
+    yaml_str = yaml.safe_dump(data, default_flow_style=False, sort_keys=False)
+    if len(yaml_str.encode("utf-8")) <= self.state_size_cap_bytes:
+      return
+
+    # Collect all items with (target_name, item_id, last_processed_timestamp)
+    items_to_sort: list[tuple[str, str, float]] = []
+    for target_name, target in self.state.targets.items():
+      for item_id, item in target.items.items():
+        items_to_sort.append((target_name, item_id, item.last_processed_timestamp))
+
+    # Sort by oldest first (ascending timestamp)
+    items_to_sort.sort(key=lambda x: x[2])
+
+    pruned_count = 0
+    for target_name, item_id, _ in items_to_sort:
+      target = self.state.targets[target_name]
+      del target.items[item_id]
+      pruned_count += 1
+
+      data = self._serialize()
+      yaml_str = yaml.safe_dump(data, default_flow_style=False, sort_keys=False)
+      if len(yaml_str.encode("utf-8")) <= self.state_size_cap_bytes:
+        break
+
+    if pruned_count > 0:
+      logger.debug(
+        "Pruned item state entries to stay within size cap",
+        pruned_count=pruned_count,
+        cap_bytes=self.state_size_cap_bytes,
+      )
 
   def _serialize(self) -> dict:
     """Serialize state to dictionary using dataclasses.asdict."""

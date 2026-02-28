@@ -17,8 +17,9 @@ Gatherarr is a worker-style daemon that periodically triggers search operations 
 
 ```mermaid
 flowchart TD
-    Main["app/main.py<br>load_config, StateManager, ArrClient<br>Scheduler, Flask /health /metrics<br>Signal handling"]
+    Main["app/main.py<br>load_config, format_banner, StateManager<br>ArrClient, Scheduler, Flask /health /metrics<br>Signal handling"]
     Config["app/config.py<br>load_config, Config, ArrTarget"]
+    Banner["app/startup_banner.py<br>format_banner"]
     State["app/state.py<br>StateManager, StateStorage<br>File / InMemory"]
     Scheduler["app/scheduler.py<br>run_once, _process_items<br>ItemHandler dispatch"]
     Handlers["app/handlers<br>MovieHandler, SeasonHandler"]
@@ -26,6 +27,7 @@ flowchart TD
     HttpClient["app/http_client<br>HttpxClient, HttpClient"]
 
     Main --> Config
+    Main --> Banner
     Main --> State
     Main --> Scheduler
     Scheduler --> Handlers
@@ -39,11 +41,12 @@ The single entry point. Responsibilities:
 
 1. **Load config** — `load_config()` reads environment variables, validates, and builds `Config`. Fails fast on validation errors.
 2. **Setup logging** — Structured JSON logging via structlog; sensitive fields redacted.
-3. **State** — Chooses `FileStateStorage` or `InMemoryStateStorage` (when `state_file_path` is None). Loads state on startup.
-4. **HTTP and Arr clients** — Creates a shared `httpx.AsyncClient` and `HttpxClient` wrapper; one `ArrClient` per target.
-5. **Scheduler** — Starts async scheduler loop. Runs until shutdown signal.
-6. **Web server** — When metrics enabled, Flask serves `/health` and `/metrics` in a daemon thread.
-7. **Shutdown** — On SIGTERM/SIGINT: stop scheduler, cancel task, close HTTP client.
+3. **Startup banner** — Emits full configuration to logs (global and per-target) via `format_banner()`. API keys are redacted.
+4. **State** — Chooses `FileStateStorage` or `InMemoryStateStorage` (when `state_file_path` is None). Loads state on startup.
+5. **HTTP and Arr clients** — Creates a shared `httpx.AsyncClient` and `HttpxClient` wrapper; one `ArrClient` per target.
+6. **Scheduler** — Starts async scheduler loop. Runs until shutdown signal.
+7. **Web server** — When metrics enabled, Flask serves `/health` and `/metrics` in a daemon thread.
+8. **Shutdown** — On SIGTERM/SIGINT: stop scheduler, cancel task, close HTTP client.
 
 **Assumption:** The process runs in a container; `state_file_path` is typically a mounted volume. No root required.
 
@@ -54,8 +57,16 @@ The single entry point. Responsibilities:
 - **Target discovery:** Sequential indices `GTH_ARR_0_*`, `GTH_ARR_1_*`, … until `GTH_ARR_n_TYPE` is missing.
 - **Per-target overrides:** `TargetSettings` inherit from global defaults; overrides applied per index.
 - **Duplicate names:** PRD requires rejection of duplicate target names (validation in load).
+- **HTTP base URL warning:** When a target `base_url` uses `http://` instead of `https://`, log a warning at config load (API keys transmitted in cleartext over HTTP).
 
 **Design decision:** Reject unrecognized `GTH_*` variables to surface typos and obsolete config early.
+
+### Startup Banner (`app/startup_banner.py`)
+
+- **Purpose:** Emit an easily readable copy of full configuration at startup so users can verify per-target configuration.
+- **Format:** Text banner with global settings and per-target settings (name, type, base_url, resolved overrides).
+- **Security:** API keys are omitted; displayed as `[REDACTED]`.
+- **Timing:** Logged at INFO level immediately after logging is configured, before scheduler starts.
 
 ### Scheduler (`app/scheduler.py`)
 
@@ -106,7 +117,7 @@ Item identifiers extend `ItemId`:
 - **Model:** `State` → `targets[name]` → `TargetState` → `items[item_id]` → `ItemState`.
 - **Persistence:** `StateStorage` protocol. `FileStateStorage` uses atomic write (temp file → fsync → rename).
 - **Corruption:** On YAML parse or deserialization error, move file to `.corrupt.<timestamp>`, start fresh.
-- **Size cap:** PRD specifies 10 MB cap; prune oldest item state when exceeded (planned).
+- **Size cap:** State file is capped at 10 MB. When the serialized state would exceed this limit, the oldest item entries (by `last_processed_timestamp`) are pruned until within cap.
 
 **Design decision:** Atomic write ensures no partial state on crash. Corrupt files are preserved for debugging.
 
@@ -144,7 +155,7 @@ Unrecognized `GTH_*` variables cause startup failure. This avoids silent typos a
 - **HTTP retries:** Network errors, 5xx, 429 retried with exponential backoff. Non-retryable errors (e.g. 4xx) fail immediately.
 - **State corruption:** Recovered by moving corrupt file aside and starting fresh. No partial state loaded.
 - **Shutdown:** Scheduler stops; in-flight work completes or is cancelled. HTTP client closed cleanly.
-- **Graceful shutdown:** PRD v0.1 adds configurable `shutdown_timeout_s` to cap shutdown duration.
+- **Graceful shutdown:** Configurable `shutdown_timeout_s` (default 30s) caps shutdown duration. The scheduler is allowed to finish in-flight work; if it does not stop within the timeout, the task is cancelled.
 
 ## Testability
 
