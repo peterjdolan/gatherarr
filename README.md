@@ -61,6 +61,7 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 - `GTH_OPS_PER_INTERVAL`: (Optional) Common number of operations to perform per interval time, default `1`.
 - `GTH_INTERVAL_S`: (Optional) Common interval duration in seconds, default `60`.
 - `GTH_ITEM_REVISIT_S`: (Optional) Minimum time in seconds to wait before reprocessing a previously successfully processed item, default `604800` (one week).
+- `GTH_HTTP_TIMEOUT_S`: (Optional) Timeout in seconds for all external HTTP calls to *arr APIs, default `30`.
 - `GTH_REQUIRE_MONITORED`: (Optional) Only search monitored items, `true|false`, default `true`.
 - `GTH_REQUIRE_CUTOFF_UNMET`: (Optional) Only search items that haven't met quality cutoff, `true|false`, default `true`.
 - `GTH_RELEASED_ONLY`: (Optional) Only search items that have been released, `true|false`, default `false`.
@@ -81,6 +82,7 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 - `GTH_ARR_<n>_OPS_PER_INTERVAL`: (Optional) Override.
 - `GTH_ARR_<n>_INTERVAL_S`: (Optional) Override.
 - `GTH_ARR_<n>_ITEM_REVISIT_S`: (Optional) Override.
+- `GTH_ARR_<n>_HTTP_TIMEOUT_S`: (Optional) Override.
 - `GTH_ARR_<n>_REQUIRE_MONITORED`: (Optional) Override.
 - `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`: (Optional) Override.
 - `GTH_ARR_<n>_RELEASED_ONLY`: (Optional) Override.
