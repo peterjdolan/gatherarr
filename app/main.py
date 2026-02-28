@@ -16,6 +16,7 @@ from app.config import load_config
 from app.http_client import HttpxClient
 from app.log_redaction import redact_sensitive_fields
 from app.scheduler import Scheduler
+from app.startup_banner import format_banner
 from app.state import FileStateStorage, InMemoryStateStorage, StateManager, StateStorage
 
 logger = structlog.get_logger()
@@ -79,6 +80,7 @@ async def main() -> None:
     sys.exit(1)
 
   setup_logging(config.log_level)
+  logger.info(format_banner(config))
   logger.debug(
     "Configuration loaded and logging configured",
     targets=len(config.targets),

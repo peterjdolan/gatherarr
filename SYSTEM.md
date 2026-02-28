@@ -17,8 +17,9 @@ Gatherarr is a worker-style daemon that periodically triggers search operations 
 
 ```mermaid
 flowchart TD
-    Main["app/main.py<br>load_config, StateManager, ArrClient<br>Scheduler, Flask /health /metrics<br>Signal handling"]
+    Main["app/main.py<br>load_config, format_banner, StateManager<br>ArrClient, Scheduler, Flask /health /metrics<br>Signal handling"]
     Config["app/config.py<br>load_config, Config, ArrTarget"]
+    Banner["app/startup_banner.py<br>format_banner"]
     State["app/state.py<br>StateManager, StateStorage<br>File / InMemory"]
     Scheduler["app/scheduler.py<br>run_once, _process_items<br>ItemHandler dispatch"]
     Handlers["app/handlers<br>MovieHandler, SeasonHandler"]
@@ -26,6 +27,7 @@ flowchart TD
     HttpClient["app/http_client<br>HttpxClient, HttpClient"]
 
     Main --> Config
+    Main --> Banner
     Main --> State
     Main --> Scheduler
     Scheduler --> Handlers
@@ -39,11 +41,12 @@ The single entry point. Responsibilities:
 
 1. **Load config** — `load_config()` reads environment variables, validates, and builds `Config`. Fails fast on validation errors.
 2. **Setup logging** — Structured JSON logging via structlog; sensitive fields redacted.
-3. **State** — Chooses `FileStateStorage` or `InMemoryStateStorage` (when `state_file_path` is None). Loads state on startup.
-4. **HTTP and Arr clients** — Creates a shared `httpx.AsyncClient` and `HttpxClient` wrapper; one `ArrClient` per target.
-5. **Scheduler** — Starts async scheduler loop. Runs until shutdown signal.
-6. **Web server** — When metrics enabled, Flask serves `/health` and `/metrics` in a daemon thread.
-7. **Shutdown** — On SIGTERM/SIGINT: stop scheduler, cancel task, close HTTP client.
+3. **Startup banner** — Emits full configuration to logs (global and per-target) via `format_banner()`. API keys are redacted.
+4. **State** — Chooses `FileStateStorage` or `InMemoryStateStorage` (when `state_file_path` is None). Loads state on startup.
+5. **HTTP and Arr clients** — Creates a shared `httpx.AsyncClient` and `HttpxClient` wrapper; one `ArrClient` per target.
+6. **Scheduler** — Starts async scheduler loop. Runs until shutdown signal.
+7. **Web server** — When metrics enabled, Flask serves `/health` and `/metrics` in a daemon thread.
+8. **Shutdown** — On SIGTERM/SIGINT: stop scheduler, cancel task, close HTTP client.
 
 **Assumption:** The process runs in a container; `state_file_path` is typically a mounted volume. No root required.
 
@@ -57,6 +60,13 @@ The single entry point. Responsibilities:
 - **HTTP base URL warning:** When a target `base_url` uses `http://` instead of `https://`, log a warning at config load (API keys transmitted in cleartext over HTTP).
 
 **Design decision:** Reject unrecognized `GTH_*` variables to surface typos and obsolete config early.
+
+### Startup Banner (`app/startup_banner.py`)
+
+- **Purpose:** Emit an easily readable copy of full configuration at startup so users can verify per-target configuration.
+- **Format:** Text banner with global settings and per-target settings (name, type, base_url, resolved overrides).
+- **Security:** API keys are omitted; displayed as `[REDACTED]`.
+- **Timing:** Logged at INFO level immediately after logging is configured, before scheduler starts.
 
 ### Scheduler (`app/scheduler.py`)
 
