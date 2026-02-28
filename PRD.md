@@ -204,20 +204,9 @@ For system architecture, design decisions, and implementation details, see [SYST
 
 **Planned features and changes:**
 
-- **Retry configuration**
-  - HTTP retries: configurable `http_max_retries`, `http_retry_initial_delay_s`, `http_retry_backoff_exponent`, `http_retry_max_delay_s` (global and per-target).
-  - Failed-search retries: configurable `search_retry_max_attempts`, `search_retry_initial_delay_s`, `search_retry_backoff_exponent`, `search_retry_max_delay_s` (global and per-target).
-- **HTTP timeout:** Configurable `http_timeout_s` for all external HTTP calls.
-- **Graceful shutdown:** Configurable `shutdown_timeout_s`; finish in-flight work or stop within timeout.
-- **Startup banner:** Emit an easily readable copy of the full configuration (global and per-target) at startup so users can verify per-target configuration. Exclude API keys.
 - **Health always live:** Serve `/health` even when metrics are disabled; run a minimal HTTP server for health regardless of `GTH_METRICS_ENABLED`. Rename `metrics_address`/`metrics_port` to `listen_address`/`listen_port` (`GTH_LISTEN_ADDRESS`, `GTH_LISTEN_PORT`) to reflect that the server hosts both health and metrics endpoints.
 - **Config validation:** On startup failure, output a concise summary of all validation issues (missing vars, invalid values). Reject duplicate target names.
 - **Log redaction:** Expand sensitive-key redaction to cover `Authorization`, `Cookie`, bearer tokens, and similar.
-- **State size cap:** Cap state file at 10 MB; prune oldest item state entries when the limit would be exceeded.
-
-**Architectural changes (readability, robustness, testability, security):**
-
-- **Configuration schema documentation:** Document the full environment variable schema (names, types, defaults, per-target overrides) in README or a dedicated config reference so the source of truth is explicit and testable.
 
 ### v0.2 (Future)
 
