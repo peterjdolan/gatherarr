@@ -212,7 +212,7 @@ For system architecture, design decisions, and implementation details, see [SYST
 - **Startup banner:** Emit an easily readable copy of the full configuration (global and per-target) at startup so users can verify per-target configuration. Exclude API keys.
 - **Health always live:** Serve `/health` even when metrics are disabled; run a minimal HTTP server for health regardless of `GTH_METRICS_ENABLED`. Rename `metrics_address`/`metrics_port` to `listen_address`/`listen_port` (`GTH_LISTEN_ADDRESS`, `GTH_LISTEN_PORT`) to reflect that the server hosts both health and metrics endpoints.
 - **Config validation:** On startup failure, output a concise summary of all validation issues (missing vars, invalid values). Reject duplicate target names.
-- **Log redaction:** Expand sensitive-key redaction to cover `Authorization`, `Cookie`, bearer tokens, and similar.
+- **Log redaction:** Expanded sensitive-key redaction to cover `Authorization`, `Cookie`, bearer tokens, `password`, `secret`, `access_token`, `refresh_token`, and similar.
 - **State size cap:** Cap state file at 10 MB; prune oldest item state entries when the limit would be exceeded.
 
 **Architectural changes (readability, robustness, testability, security):**

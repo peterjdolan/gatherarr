@@ -113,7 +113,7 @@ Item identifiers extend `ItemId`:
 ### Logging and Metrics
 
 - **Structured logs:** structlog, JSON to stdout/stderr. Correlation fields: `target_name`, `target_type`, `run_id`, `movie_id`/`series_id`/`season_number`.
-- **Redaction:** `log_redaction.redact_sensitive_fields` removes `api_key`, `apikey`, `x-api-key`, etc. from all log output.
+- **Redaction:** `log_redaction.redact_sensitive_fields` removes `api_key`, `apikey`, `x-api-key`, `Authorization`, `Cookie`, `token`, `access_token`, `refresh_token`, `password`, `secret`, and similar auth/session keys from all log output.
 - **Log levels:** INFO for actions that affect targets (searches); DEBUG for fetches, internal steps.
 - **Metrics:** Prometheus counters/gauges/histograms; served on `/metrics` when enabled.
 

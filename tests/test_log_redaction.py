@@ -42,6 +42,30 @@ class TestLogRedaction:
     assert redacted["items"][0]["x_api_key"] == REDACTED_VALUE
     assert redacted["items"][1]["value"] == "safe-value"
 
+  def test_redacts_authorization_cookie_and_bearer_tokens(self) -> None:
+    """Redaction should cover Authorization, Cookie, and bearer-token-like keys."""
+    event_dict: dict[str, Any] = {
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "Cookie": "session=abc123; auth_token=xyz789",
+      "token": "secret-token-value",
+      "access_token": "oauth-access-token",
+      "refresh_token": "oauth-refresh-token",
+      "password": "user-password",
+      "secret": "shared-secret",
+      "safe_key": "default",
+    }
+
+    redacted = redact_sensitive_fields(logger=object(), method_name="debug", event_dict=event_dict)
+
+    assert redacted["Authorization"] == REDACTED_VALUE
+    assert redacted["Cookie"] == REDACTED_VALUE
+    assert redacted["token"] == REDACTED_VALUE
+    assert redacted["access_token"] == REDACTED_VALUE
+    assert redacted["refresh_token"] == REDACTED_VALUE
+    assert redacted["password"] == REDACTED_VALUE
+    assert redacted["secret"] == REDACTED_VALUE
+    assert redacted["safe_key"] == "default"
+
   def test_redacts_sensitive_fields_in_pydantic_models(self) -> None:
     """Redaction should sanitize pydantic model fields named api_key."""
     target = ArrTarget(

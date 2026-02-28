@@ -10,6 +10,19 @@ SENSITIVE_KEYS = frozenset(
     "apikey",
     "x-api-key",
     "x_api_key",
+    "authorization",
+    "cookie",
+    "token",
+    "access_token",
+    "refresh_token",
+    "bearer_token",
+    "secret",
+    "password",
+    "x-auth-token",
+    "x_auth_token",
+    "session_id",
+    "sessionid",
+    "jwt",
   }
 )
 
