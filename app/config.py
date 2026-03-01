@@ -24,7 +24,7 @@ _TARGET_OVERRIDE_ENV_MAP: tuple[tuple[str, str], ...] = (
   ("ITEM_REVISIT_S", "item_revisit_s"),
   ("REQUIRE_MONITORED", "require_monitored"),
   ("REQUIRE_CUTOFF_UNMET", "require_cutoff_unmet"),
-  ("RELEASED_ONLY", "released_only"),
+  ("REQUIRE_RELEASED", "require_released"),
   ("DRY_RUN", "dry_run"),
   ("INCLUDE_TAGS", "include_tags"),
   ("EXCLUDE_TAGS", "exclude_tags"),
@@ -57,7 +57,7 @@ class TargetSettings(BaseModel):
   item_revisit_s: int = Field(ge=1)
   require_monitored: bool = True
   require_cutoff_unmet: bool = True
-  released_only: bool = False
+  require_released: bool = True
   dry_run: bool = False
   include_tags: set[str] = Field(default_factory=set)
   exclude_tags: set[str] = Field(default_factory=set)
@@ -150,8 +150,8 @@ def _build_target_settings(base_config: "Config", override_data: dict[str, str])
     require_cutoff_unmet=_parse_bool_override(
       override_data.get("require_cutoff_unmet"), base_config.require_cutoff_unmet
     ),
-    released_only=_parse_bool_override(
-      override_data.get("released_only"), base_config.released_only
+    require_released=_parse_bool_override(
+      override_data.get("require_released"), base_config.require_released
     ),
     dry_run=_parse_bool_override(override_data.get("dry_run"), base_config.dry_run),
     include_tags=coerce_tag_set(include_tags_raw),
@@ -252,7 +252,7 @@ class ArrTarget(BaseModel):
       ("http_timeout_s", lambda v: v),
       ("require_monitored", lambda v: v),
       ("require_cutoff_unmet", lambda v: v),
-      ("released_only", lambda v: v),
+      ("require_released", lambda v: v),
       ("dry_run", lambda v: v),
       ("include_tags", lambda v: sorted(v)),
       ("exclude_tags", lambda v: sorted(v)),
@@ -292,7 +292,7 @@ class Config(BaseSettings):
   item_revisit_s: int = Field(default=604800, ge=1)
   require_monitored: bool = True
   require_cutoff_unmet: bool = True
-  released_only: bool = False
+  require_released: bool = True
   dry_run: bool = False
   include_tags: str = ""
   exclude_tags: str = ""

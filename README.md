@@ -73,7 +73,7 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 | **Eligibility** | | |
 | `GTH_REQUIRE_MONITORED` | Only search monitored items | `true` |
 | `GTH_REQUIRE_CUTOFF_UNMET` | Only search items that haven't met quality cutoff | `true` |
-| `GTH_RELEASED_ONLY` | Only search items that have been released | `false` |
+| `GTH_REQUIRE_RELEASED` | Only search items that have been released | `true` |
 | `GTH_INCLUDE_TAGS` | Comma-separated tags; items must have at least one matching tag, empty = no filter | (empty) |
 | `GTH_EXCLUDE_TAGS` | Comma-separated tags; items with any matching tag are excluded, empty = no filter | (empty) |
 | `GTH_MIN_MISSING_EPISODES` | (Sonarr) Minimum number of missing episodes required | `0` |
@@ -131,7 +131,7 @@ All global options may be overridden per target with `GTH_ARR_<n>_<OPTION>`. The
 
 | Section | Overridable variables |
 |---------|-----------------------|
-| **Base** | `GTH_ARR_<n>_OPS_PER_INTERVAL`, `GTH_ARR_<n>_INTERVAL_S`, `GTH_ARR_<n>_ITEM_REVISIT_S`, `GTH_ARR_<n>_REQUIRE_MONITORED`, `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`, `GTH_ARR_<n>_RELEASED_ONLY`, `GTH_ARR_<n>_INCLUDE_TAGS`, `GTH_ARR_<n>_EXCLUDE_TAGS`, `GTH_ARR_<n>_MIN_MISSING_EPISODES`, `GTH_ARR_<n>_MIN_MISSING_PERCENT`, `GTH_ARR_<n>_DRY_RUN` |
+| **Base** | `GTH_ARR_<n>_OPS_PER_INTERVAL`, `GTH_ARR_<n>_INTERVAL_S`, `GTH_ARR_<n>_ITEM_REVISIT_S`, `GTH_ARR_<n>_REQUIRE_MONITORED`, `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`, `GTH_ARR_<n>_REQUIRE_RELEASED`, `GTH_ARR_<n>_INCLUDE_TAGS`, `GTH_ARR_<n>_EXCLUDE_TAGS`, `GTH_ARR_<n>_MIN_MISSING_EPISODES`, `GTH_ARR_<n>_MIN_MISSING_PERCENT`, `GTH_ARR_<n>_DRY_RUN` |
 | **HTTP** | `GTH_ARR_<n>_HTTP_TIMEOUT_S` |
 | **Retry** | `GTH_ARR_<n>_HTTP_MAX_RETRIES`, `GTH_ARR_<n>_HTTP_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_HTTP_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_HTTP_RETRY_MAX_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_ATTEMPTS`, `GTH_ARR_<n>_SEARCH_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_DELAY_S` |
 

@@ -79,7 +79,7 @@ class TestFormatBanner:
       "GTH_STATE_FILE_PATH": "",
       "GTH_REQUIRE_MONITORED": "false",
       "GTH_REQUIRE_CUTOFF_UNMET": "false",
-      "GTH_RELEASED_ONLY": "true",
+      "GTH_REQUIRE_RELEASED": "true",
       "GTH_INCLUDE_TAGS": "4k, anime",
       "GTH_EXCLUDE_TAGS": "paused",
       "GTH_ARR_0_TYPE": "sonarr",
@@ -95,7 +95,7 @@ class TestFormatBanner:
     banner = format_banner(config)
     assert "require_monitored: False" in banner
     assert "require_cutoff_unmet: False" in banner
-    assert "released_only: True" in banner
+    assert "require_released: True" in banner
     assert "include_tags: anime" in banner
     assert "exclude_tags: blocked" in banner
     assert "min_missing_episodes: 3" in banner
