@@ -14,8 +14,8 @@ class TestFormatBanner:
       "GTH_STATE_FILE_PATH": "",
       "GTH_LOG_LEVEL": "debug",
       "GTH_METRICS_ENABLED": "false",
-      "GTH_METRICS_ADDRESS": "127.0.0.1",
-      "GTH_METRICS_PORT": "8080",
+      "GTH_LISTEN_ADDRESS": "127.0.0.1",
+      "GTH_LISTEN_PORT": "8080",
       "GTH_OPS_PER_INTERVAL": "5",
       "GTH_INTERVAL_S": "120",
       "GTH_ARR_0_TYPE": "radarr",
@@ -28,8 +28,8 @@ class TestFormatBanner:
     assert "=== Gatherarr Startup Configuration ===" in banner
     assert "log_level: DEBUG" in banner
     assert "metrics_enabled: False" in banner
-    assert "metrics_address: 127.0.0.1" in banner
-    assert "metrics_port: 8080" in banner
+    assert "listen_address: 127.0.0.1" in banner
+    assert "listen_port: 8080" in banner
     assert "state_file_path: (in-memory)" in banner
     assert "ops_per_interval: 5" in banner
     assert "interval_s: 120" in banner
