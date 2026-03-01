@@ -30,6 +30,9 @@ def setup_logging(log_level: str) -> None:
     raise ValueError(f"Invalid log level: {log_level}")
   logging.basicConfig(level=numeric_level)
 
+  for name in ("httpx", "httpcore", "werkzeug", "urllib3"):
+    logging.getLogger(name).setLevel(logging.WARNING)
+
   structlog.configure(
     processors=[
       structlog.processors.TimeStamper(fmt="iso"),
@@ -87,7 +90,7 @@ async def main() -> None:
     sys.exit(1)
 
   setup_logging(config.log_level)
-  logger.info(format_banner(config))
+  print(format_banner(config), flush=True)
   logger.debug(
     "Configuration loaded and logging configured",
     targets=len(config.targets),
