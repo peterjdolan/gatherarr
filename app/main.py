@@ -41,8 +41,8 @@ def setup_logging(log_level: str) -> None:
   )
 
 
-def create_web_app() -> Flask:
-  """Create and configure the Flask application for metrics."""
+def create_web_app(metrics_enabled: bool = True) -> Flask:
+  """Create and configure the Flask application for health and metrics endpoints."""
   app = Flask(__name__)
 
   @app.route("/health")
@@ -50,24 +50,31 @@ def create_web_app() -> Flask:
     """Health check endpoint."""
     return Response("OK", mimetype="text/plain")
 
-  @app.route("/metrics")
-  def metrics_handler() -> Response:
-    """Prometheus metrics endpoint."""
-    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+  if metrics_enabled:
+
+    @app.route("/metrics")
+    def metrics_handler() -> Response:
+      """Prometheus metrics endpoint."""
+      return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
   return app
 
 
-def start_web_server(address: str, port: int) -> threading.Thread:
-  """Start the Flask web server for metrics and health endpoints in a separate thread."""
-  app = create_web_app()
+def start_web_server(address: str, port: int, metrics_enabled: bool = True) -> threading.Thread:
+  """Start the Flask web server for health and metrics endpoints in a separate thread."""
+  app = create_web_app(metrics_enabled=metrics_enabled)
 
   def run_server() -> None:
     app.run(host=address, port=port, threaded=True, use_reloader=False)
 
   server_thread = threading.Thread(target=run_server, daemon=True)
   server_thread.start()
-  logger.debug("HTTP server started", address=address, port=port)
+  logger.debug(
+    "HTTP server started",
+    address=address,
+    port=port,
+    metrics_enabled=metrics_enabled,
+  )
   return server_thread
 
 
@@ -122,10 +129,7 @@ async def main() -> None:
   logger.debug("Starting scheduler task")
   scheduler_task = asyncio.create_task(scheduler.start())
 
-  if config.metrics_enabled:
-    start_web_server(config.metrics_address, config.metrics_port)
-  else:
-    logger.debug("Metrics disabled, skipping web server")
+  start_web_server(config.listen_address, config.listen_port, config.metrics_enabled)
 
   shutdown_event = asyncio.Event()
 

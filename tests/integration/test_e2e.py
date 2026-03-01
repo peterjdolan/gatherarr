@@ -419,7 +419,7 @@ async def test_metrics_endpoint_exposes_target_metrics_after_scheduler_run(tmp_p
       scheduler = Scheduler([target], state_manager, {target.name: arr_client})
       await scheduler.run_once(target)
 
-  web_app = create_web_app()
+  web_app = create_web_app(metrics_enabled=True)
   test_client = web_app.test_client()
 
   health_response = test_client.get("/health")

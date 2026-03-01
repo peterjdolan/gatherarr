@@ -45,7 +45,7 @@ The single entry point. Responsibilities:
 4. **State** — Chooses `FileStateStorage` or `InMemoryStateStorage` (when `state_file_path` is None). Loads state on startup.
 5. **HTTP and Arr clients** — Creates a shared `httpx.AsyncClient` and `HttpxClient` wrapper; one `ArrClient` per target.
 6. **Scheduler** — Starts async scheduler loop. Runs until shutdown signal.
-7. **Web server** — When metrics enabled, Flask serves `/health` and `/metrics` in a daemon thread.
+7. **Web server** — Flask always serves `/health` in a daemon thread; when metrics enabled, `/metrics` is also served. Both use `listen_address` and `listen_port`.
 8. **Shutdown** — On SIGTERM/SIGINT: stop scheduler, cancel task, close HTTP client.
 
 **Assumption:** The process runs in a container; `state_file_path` is typically a mounted volume. No root required.
@@ -126,7 +126,7 @@ Item identifiers extend `ItemId`:
 - **Structured logs:** structlog, JSON to stdout/stderr. Correlation fields: `target_name`, `target_type`, `run_id`, `movie_id`/`series_id`/`season_number`.
 - **Redaction:** `log_redaction.redact_sensitive_fields` removes `api_key`, `apikey`, `x-api-key`, etc. from all log output.
 - **Log levels:** INFO for actions that affect targets (searches); DEBUG for fetches, internal steps.
-- **Metrics:** Prometheus counters/gauges/histograms; served on `/metrics` when enabled.
+- **Health:** `/health` always served for liveness/readiness. **Metrics:** Prometheus counters/gauges/histograms; served on `/metrics` when enabled.
 
 ## Design Decisions and Assumptions
 

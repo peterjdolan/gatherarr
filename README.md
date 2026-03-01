@@ -21,7 +21,7 @@ For product requirements, see [PRD.md](PRD.md). For system architecture and desi
 
 ## Roadmap
 
-- **v0.1 (in progress):** Health endpoint always served (independent of metrics), config validation summary and duplicate target name rejection, expanded log redaction.
+- **v0.1 (in progress):** Config validation summary and duplicate target name rejection, expanded log redaction.
 - **v0.2:** Lidarr and Whisparr support.
 - **v1.0:** Backwards compatibility for configuration. Until v1.0, configuration variable names and behavior may change between releases.
 
@@ -74,11 +74,11 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 
 ### Advanced configuration
 
-#### Metrics
+#### HTTP server (health and metrics)
 
-- `GTH_METRICS_ENABLED`: (Optional) Whether or not to host the metrics endpoint, `true|false`, default `false`.
-- `GTH_METRICS_ADDRESS`: (Optional) Metrics endpoint listen address, default `0.0.0.0`.
-- `GTH_METRICS_PORT`: (Optional) Metrics endpoint port, default `9090`.
+- `GTH_LISTEN_ADDRESS`: (Optional) Listen address for the HTTP server (health and metrics endpoints), default `0.0.0.0`.
+- `GTH_LISTEN_PORT`: (Optional) Listen port for the HTTP server, default `9090`.
+- `GTH_METRICS_ENABLED`: (Optional) Whether or not to host the metrics endpoint, `true|false`, default `false`. The health endpoint (`/health`) is always served regardless of this setting.
 
 #### Filtering and tuning
 
@@ -113,7 +113,7 @@ All global options may be overridden per target with `GTH_ARR_<n>_<OPTION>`:
 
 ## Metrics
 
-When `GTH_METRICS_ENABLED` is `true`, Gatherarr exposes a Prometheus-compatible endpoint at `/metrics` on the configured port. The following metrics are exported:
+Gatherarr always serves a health endpoint at `/health` for liveness and readiness checks. When `GTH_METRICS_ENABLED` is `true`, it also exposes a Prometheus-compatible endpoint at `/metrics` on the same address and port. The following metrics are exported:
 
 | Metric | Type | Description | Labels |
 |--------|------|-------------|--------|
