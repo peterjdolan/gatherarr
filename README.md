@@ -51,26 +51,6 @@ Configuration is done by environment variables only. Docker Compose users are we
 
 Gatherarr will not start if any unrecognized environment variables beginning with `GTH_` are present. This helps detect typos (e.g. `GTH_ARR_0_TYPO` instead of `GTH_ARR_0_TYPE`) and obsolete configuration.
 
-**Contents:** [Base configuration](#base-configuration) · [Advanced configuration](#advanced-configuration) · [Per-target overrides](#per-target-overrides)
-
-### Quick reference
-
-| Variable | Default | Variable | Default |
-|----------|---------|----------|---------|
-| `GTH_LOG_LEVEL` | `info` | `GTH_STATE_FILE_PATH` | `/data/state.yaml` |
-| `GTH_OPS_PER_INTERVAL` | `1` | `GTH_INTERVAL_S` | `60` |
-| `GTH_ITEM_REVISIT_S` | `604800` | `GTH_HTTP_TIMEOUT_S` | `30` |
-| `GTH_REQUIRE_MONITORED` | `true` | `GTH_REQUIRE_CUTOFF_UNMET` | `true` |
-| `GTH_DRY_RUN` | `false` | `GTH_SHUTDOWN_TIMEOUT_S` | `30` |
-| `GTH_LISTEN_ADDRESS` | `0.0.0.0` | `GTH_LISTEN_PORT` | `9090` |
-| `GTH_METRICS_ENABLED` | `false` | `GTH_HTTP_MAX_RETRIES` | `3` |
-| `GTH_HTTP_RETRY_INITIAL_DELAY_S` | `1.0` | `GTH_HTTP_RETRY_BACKOFF_EXPONENT` | `2.0` |
-| `GTH_HTTP_RETRY_MAX_DELAY_S` | `30.0` | `GTH_SEARCH_RETRY_MAX_ATTEMPTS` | `5` |
-| `GTH_SEARCH_RETRY_INITIAL_DELAY_S` | `60` | `GTH_SEARCH_RETRY_BACKOFF_EXPONENT` | `2.0` |
-| `GTH_SEARCH_RETRY_MAX_DELAY_S` | `86400` | `GTH_RELEASED_ONLY` | `false` |
-| `GTH_INCLUDE_TAGS` | (empty) | `GTH_EXCLUDE_TAGS` | (empty) |
-| `GTH_MIN_MISSING_EPISODES` | `0` | `GTH_MIN_MISSING_PERCENT` | `0.0` |
-
 ### Base configuration
 
 #### Per-target (required)
