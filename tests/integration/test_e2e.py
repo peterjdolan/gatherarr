@@ -5,6 +5,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterator
@@ -383,6 +384,7 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
 
 @pytest.mark.asyncio
 async def test_metrics_endpoint_exposes_target_metrics_after_scheduler_run(tmp_path: Path) -> None:
+  past_release = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
   responses = {
     ("GET", "/api/v3/movie"): [
       ResponseSpec(
@@ -393,6 +395,7 @@ async def test_metrics_endpoint_exposes_target_metrics_after_scheduler_run(tmp_p
             "title": "Metrics Movie",
             "monitored": True,
             "hasFile": False,
+            "digitalRelease": past_release,
           }
         ],
       ),
