@@ -5,6 +5,7 @@ description = "A minimal worker-style Arr search runner (initial skeleton)."
 requires-python = "==3.14.*"
 license = { text = "MIT" }
 dependencies = [
+  "attrs>=25.4.0",
   "flask>=3.0.0",
   "httpx>=0.25.0",
   "prometheus-client>=0.19.0",
@@ -19,6 +20,7 @@ dependencies = [
 dev = [
   "mypy>=1.7.0",
   "openapi-core>=0.22.0",
+  "openapi-python-client>=0.28.2",
   "poethepoet>=0.24.0",
   "pytest>=7.4.0",
   "pytest-asyncio>=0.23.0",
@@ -32,6 +34,7 @@ dev = [
 [tool.poe.tasks]
 check = ["format", "lint", "type-check", "test"]
 check-e2e = ["check", "test-e2e"]
+generate-clients = "openapi-python-client generate --path context/radarr_api.json --output-path app/radarr_client --meta none --overwrite && openapi-python-client generate --path context/sonarr_api.json --output-path app/sonarr_client --meta none --overwrite"
 format = "ruff format ."
 format-check = "ruff format --check ."
 lint = "ruff check --fix ."
@@ -57,6 +60,7 @@ known-first-party = ["app"]
 [tool.mypy]
 python_version = "3.14"
 warn_return_any = true
+exclude = ["app/radarr_client", "app/sonarr_client"]
 warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true

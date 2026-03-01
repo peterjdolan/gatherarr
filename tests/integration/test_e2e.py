@@ -19,7 +19,6 @@ from openapi_core.exceptions import OpenAPIError
 
 from app.arr_client import ArrClient
 from app.config import ArrTarget, ArrType, TargetSettings
-from app.http_client import HttpxClient
 from app.main import create_web_app
 from app.handlers import MovieId, SeasonId
 from app.scheduler import Scheduler
@@ -190,7 +189,9 @@ class FakeArrServer:
       pass
 
   def _select_response(self, method: str, path: str) -> ResponseSpec:
-    key = (method, path)
+    # Normalize path: strip query string for lookup (generated clients add params)
+    path_base = path.split("?")[0] if "?" in path else path
+    key = (method, path_base)
     if key not in self._responses:
       return ResponseSpec(status_code=404, body={"error": "unconfigured_route"})
 
@@ -223,12 +224,14 @@ class FakeArrServer:
     return len(self.requests_for(method, path))
 
   def requests_for(self, method: str, path: str) -> list[CapturedRequest]:
-    """Get captured requests for a method/path pair."""
+    """Get captured requests for a method/path pair (path matches base without query)."""
+    path_base = path.split("?")[0] if "?" in path else path
     with self._lock:
       return [
         request
         for request in self._captured_requests
-        if request.method == method and request.path == path
+        if request.method == method
+        and (request.path == path_base or request.path.startswith(path_base + "?"))
       ]
 
 
@@ -292,10 +295,14 @@ async def test_radarr_success_flow_with_real_http_stack() -> None:
   with running_fake_arr_server(radarr_contract(), responses) as fake_server:
     target = create_target("integration-radarr-success", ArrType.RADARR, fake_server.base_url, 1)
 
-    async with httpx.AsyncClient() as async_http_client:
+    async with httpx.AsyncClient(
+      base_url=fake_server.base_url,
+      headers={"X-Api-Key": "integration-key", "Content-Type": "application/json"},
+      timeout=0.5,
+    ) as async_http_client:
       arr_client = ArrClient(
         target=target,
-        http_client=HttpxClient(async_http_client),
+        http_client=async_http_client,
         max_retries=2,
         retry_initial_delay_s=0.01,
         timeout_s=0.5,
@@ -339,10 +346,14 @@ async def test_sonarr_success_flow_with_real_http_stack() -> None:
   with running_fake_arr_server(sonarr_contract(), responses) as fake_server:
     target = create_target("integration-sonarr-success", ArrType.SONARR, fake_server.base_url, 1)
 
-    async with httpx.AsyncClient() as async_http_client:
+    async with httpx.AsyncClient(
+      base_url=fake_server.base_url,
+      headers={"X-Api-Key": "integration-key", "Content-Type": "application/json"},
+      timeout=0.5,
+    ) as async_http_client:
       arr_client = ArrClient(
         target=target,
-        http_client=HttpxClient(async_http_client),
+        http_client=async_http_client,
         max_retries=2,
         retry_initial_delay_s=0.01,
         timeout_s=0.5,
@@ -408,10 +419,14 @@ async def test_metrics_endpoint_exposes_target_metrics_after_scheduler_run(tmp_p
     state_manager = StateManager(FileStateStorage(state_file_path))
     state_manager.load()
 
-    async with httpx.AsyncClient() as async_http_client:
+    async with httpx.AsyncClient(
+      base_url=fake_server.base_url,
+      headers={"X-Api-Key": "integration-key", "Content-Type": "application/json"},
+      timeout=0.5,
+    ) as async_http_client:
       arr_client = ArrClient(
         target=target,
-        http_client=HttpxClient(async_http_client),
+        http_client=async_http_client,
         max_retries=2,
         retry_initial_delay_s=0.01,
         timeout_s=0.5,

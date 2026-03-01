@@ -1,6 +1,10 @@
-"""HTTP client for *arr APIs with retry logic."""
+"""HTTP client for *arr APIs with retry logic.
 
-from typing import TYPE_CHECKING, Any, Protocol, cast
+Uses OpenAPI-generated client stubs for Radarr and Sonarr to strictly adhere
+to the official API specifications.
+"""
+
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import structlog
@@ -15,25 +19,15 @@ from tenacity import (
 from app.action_logging import Action
 from app.config import ArrTarget, ArrType
 from app.metrics import request_errors_total, requests_total
+from app.radarr_client import Client as RadarrClient
+from app.radarr_client.api.movie import get_api_v3_movie
+from app.sonarr_client import Client as SonarrClient
+from app.sonarr_client.api.series import get_api_v3_series
 
 if TYPE_CHECKING:
   from app.handlers import MovieId, SeasonId
 
 logger = structlog.get_logger()
-
-
-class HttpClient(Protocol):
-  """Protocol for HTTP client operations."""
-
-  async def get(self, url: str, headers: dict[str, str], timeout: float) -> Any:
-    """Make GET request."""
-    ...
-
-  async def post(
-    self, url: str, headers: dict[str, str], timeout: float, payload: dict[str, Any] | None = None
-  ) -> Any:
-    """Make POST request."""
-    ...
 
 
 def _is_retryable_response_error(exception: BaseException) -> bool:
@@ -44,13 +38,28 @@ def _is_retryable_response_error(exception: BaseException) -> bool:
   return False
 
 
+def _movie_resource_to_dict(movie: Any) -> dict[str, Any]:
+  """Convert MovieResource to dict for handlers. Uses API camelCase keys."""
+  d: dict[str, Any] = movie.to_dict()
+  return d
+
+
+def _series_resource_to_dict(series: Any) -> dict[str, Any]:
+  """Convert SeriesResource to dict for handlers. Uses API camelCase keys."""
+  d: dict[str, Any] = series.to_dict()
+  return d
+
+
 class ArrClient:
   """Client for interacting with *arr APIs."""
+
+  _radarr_client: RadarrClient | None
+  _sonarr_client: SonarrClient | None
 
   def __init__(
     self,
     target: ArrTarget,
-    http_client: HttpClient,
+    http_client: httpx.AsyncClient | None = None,
     *,
     max_retries: int | None = None,
     retry_initial_delay_s: float | None = None,
@@ -62,7 +71,7 @@ class ArrClient:
     settings = target.settings
     self.target = target
     self.base_url = target.base_url.rstrip("/")
-    self.http_client = http_client
+    self._http_client = http_client
     self.max_retries = max_retries if max_retries is not None else settings.http_max_retries
     self.retry_initial_delay_s = (
       retry_initial_delay_s
@@ -78,6 +87,43 @@ class ArrClient:
       retry_max_delay_s if retry_max_delay_s is not None else settings.http_retry_max_delay_s
     )
     self.timeout_s = timeout_s if timeout_s is not None else settings.http_timeout_s
+
+    headers = {"X-Api-Key": target.api_key, "Content-Type": "application/json"}
+    timeout = httpx.Timeout(timeout_s or settings.http_timeout_s)
+
+    if self._http_client is None:
+      self._http_client = httpx.AsyncClient(
+        base_url=self.base_url,
+        headers=headers,
+        timeout=timeout,
+      )
+      self._owns_client = True
+    else:
+      self._owns_client = False
+
+    self._radarr_client = None
+    self._sonarr_client = None
+    if target.arr_type == ArrType.RADARR:
+      radarr_client = RadarrClient(
+        base_url=self.base_url,
+        headers=headers,
+        timeout=timeout,
+      )
+      radarr_client.set_async_httpx_client(self._http_client)
+      self._radarr_client = radarr_client
+    else:
+      sonarr_client = SonarrClient(
+        base_url=self.base_url,
+        headers=headers,
+        timeout=timeout,
+      )
+      sonarr_client.set_async_httpx_client(self._http_client)
+      self._sonarr_client = sonarr_client
+
+  async def aclose(self) -> None:
+    """Close the underlying HTTP client if owned."""
+    if self._owns_client and self._http_client is not None:
+      await self._http_client.aclose()
 
   def _get_headers(self) -> dict[str, str]:
     """Get HTTP headers for API requests."""
@@ -130,12 +176,16 @@ class ArrClient:
       nonlocal attempt
       attempt += 1
 
-      headers = self._get_headers()
       logger.debug("Executing HTTP request", attempt=attempt, **request_logging_ids)
+      client = self._http_client
+      if client is None:
+        raise RuntimeError("HTTP client is closed")
       if method == "GET":
-        result = await self.http_client.get(url, headers, self.timeout_s)
+        response = await client.get(url)
       else:
-        result = await self.http_client.post(url, headers, self.timeout_s, payload)
+        response = await client.post(url, json=payload)
+      response.raise_for_status()
+      result = response.json()
       logger.debug(
         "HTTP request completed",
         attempt=attempt,
@@ -159,23 +209,47 @@ class ArrClient:
       raise
 
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict[str, Any]]:
-    """Get all movies from Radarr."""
+    """Get all movies from Radarr using the OpenAPI-generated client."""
     if self.target.arr_type != ArrType.RADARR:
       raise ValueError(f"get_movies() only supported for radarr, got {self.target.arr_type}")
-    url = f"{self.base_url}/api/v3/movie"
+    if self._radarr_client is None:
+      raise ValueError("Radarr client not initialized")
+
     get_movies_logging_ids = {
       "action": Action.GET_MOVIES,
-      "url": url,
+      "url": f"{self.base_url}/api/v3/movie",
       **logging_ids,
       **self.target.logging_ids(),
     }
     logger.debug("Fetching movies", **get_movies_logging_ids)
+
+    radarr_client = self._radarr_client
+    if radarr_client is None:
+      raise ValueError("Radarr client not initialized")
+
+    retry_decorator = self._make_retry_decorator()
+    target_name = self.target.name
+    arr_type = self.target.arr_type.value
+    requests_total.labels(
+      target=target_name, type=arr_type, operation=Action.GET_MOVIES.value
+    ).inc()
+
+    @retry_decorator
+    async def _do_fetch() -> list[dict[str, Any]]:
+      assert radarr_client is not None
+      result = await get_api_v3_movie.asyncio(client=radarr_client)
+      if result is None:
+        return []
+      return [_movie_resource_to_dict(m) for m in result]
+
     try:
-      result = await self._request("GET", url, Action.GET_MOVIES, get_movies_logging_ids)
-      movies = cast(list[dict[str, Any]], result)
+      movies: list[dict[str, Any]] = await _do_fetch()
       logger.debug("Fetched movies", movie_count=len(movies), **get_movies_logging_ids)
       return movies
     except Exception as e:
+      request_errors_total.labels(
+        target=target_name, type=arr_type, operation=Action.GET_MOVIES.value
+      ).inc()
       logger.exception(
         "Exception while fetching movies",
         exception=e,
@@ -227,31 +301,52 @@ class ArrClient:
     return seasons
 
   async def get_seasons(self, logging_ids: dict[str, Any]) -> list[dict[str, Any]]:
-    """Get season-level search items from Sonarr series payloads."""
+    """Get season-level search items from Sonarr using the OpenAPI-generated client."""
     if self.target.arr_type != ArrType.SONARR:
       raise ValueError(f"get_seasons() only supported for sonarr, got {self.target.arr_type}")
-    url = f"{self.base_url}/api/v3/series"
+    if self._sonarr_client is None:
+      raise ValueError("Sonarr client not initialized")
 
     get_seasons_logging_ids = {
       "action": Action.GET_SEASONS,
-      "url": url,
+      "url": f"{self.base_url}/api/v3/series",
       **logging_ids,
       **self.target.logging_ids(),
     }
     logger.debug("Fetching series for season extraction", **get_seasons_logging_ids)
+
+    retry_decorator = self._make_retry_decorator()
+    target_name = self.target.name
+    arr_type = self.target.arr_type.value
+    requests_total.labels(
+      target=target_name, type=arr_type, operation=Action.GET_SEASONS.value
+    ).inc()
+
+    sonarr_client = self._sonarr_client
+    if sonarr_client is None:
+      raise ValueError("Sonarr client not initialized")
+
+    @retry_decorator
+    async def _do_fetch() -> list[dict[str, Any]]:
+      assert sonarr_client is not None
+      result = await get_api_v3_series.asyncio(client=sonarr_client)
+      if result is None:
+        return []
+      series_dicts = [_series_resource_to_dict(s) for s in result]
+      return self._extract_seasons_from_series(series_dicts, get_seasons_logging_ids)
+
     try:
-      result = await self._request("GET", url, Action.GET_SEASONS, get_seasons_logging_ids)
-      series_items = cast(list[dict[str, Any]], result)
-      series_count = len(series_items)
-      season_items = self._extract_seasons_from_series(series_items, get_seasons_logging_ids)
+      season_items: list[dict[str, Any]] = await _do_fetch()
       logger.debug(
         "Fetched seasons",
-        series_count=series_count,
         season_count=len(season_items),
         **get_seasons_logging_ids,
       )
       return season_items
     except Exception as e:
+      request_errors_total.labels(
+        target=target_name, type=arr_type, operation=Action.GET_SEASONS.value
+      ).inc()
       logger.exception(
         "Exception while fetching seasons",
         exception=e,
@@ -277,9 +372,11 @@ class ArrClient:
     }
     logger.debug("Searching movie", **search_logging_ids)
     try:
-      result = await self._request("POST", url, Action.SEARCH_MOVIE, search_logging_ids, payload)
+      result: dict[str, Any] = await self._request(
+        "POST", url, Action.SEARCH_MOVIE, search_logging_ids, payload
+      )
       logger.debug("Movie searched", **search_logging_ids)
-      return cast(dict[str, Any], result)
+      return result
     except Exception as e:
       logger.exception(
         "Exception while searching movie",
@@ -313,9 +410,11 @@ class ArrClient:
     }
     logger.debug("Searching season", **search_logging_ids)
     try:
-      result = await self._request("POST", url, Action.SEARCH_SEASON, search_logging_ids, payload)
+      result: dict[str, Any] = await self._request(
+        "POST", url, Action.SEARCH_SEASON, search_logging_ids, payload
+      )
       logger.debug("Season searched", **search_logging_ids)
-      return cast(dict[str, Any], result)
+      return result
     except Exception as e:
       logger.exception(
         "Exception while searching season",

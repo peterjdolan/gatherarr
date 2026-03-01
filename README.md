@@ -166,6 +166,14 @@ Attach to the included devcontainer, and run
 uv sync
 ```
 
+### Regenerating API clients
+
+Radarr and Sonarr client stubs are generated from OpenAPI specs in `context/`. Regenerate with:
+
+```bash
+uv run poe generate-clients
+```
+
 ### Verifying changes
 
 - Incremental: `uv run poe check`
