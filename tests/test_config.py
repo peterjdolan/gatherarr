@@ -368,6 +368,42 @@ class TestLoadConfig:
     assert config.targets[0].name == "radarr1"
     assert config.targets[1].name == "sonarr1"
 
+  def test_load_config_rejects_duplicate_target_names(self) -> None:
+    """Duplicate GTH_ARR_<n>_NAME values must be rejected."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "same-name",
+      "GTH_ARR_0_BASEURL": "http://radarr1:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "same-name",
+      "GTH_ARR_1_BASEURL": "http://sonarr1:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+    }
+    with pytest.raises(ValueError, match="Duplicate target names: same-name"):
+      load_config(env)
+
+  def test_load_config_rejects_duplicate_target_names_three_targets(self) -> None:
+    """Multiple duplicates must all be reported."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "dup",
+      "GTH_ARR_0_BASEURL": "http://a:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "other",
+      "GTH_ARR_1_BASEURL": "http://b:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+      "GTH_ARR_2_TYPE": "radarr",
+      "GTH_ARR_2_NAME": "dup",
+      "GTH_ARR_2_BASEURL": "http://c:7878",
+      "GTH_ARR_2_APIKEY": "key3",
+    }
+    with pytest.raises(ValueError, match="Duplicate target names: dup"):
+      load_config(env)
+
   def test_load_config_missing_required_raises(self) -> None:
     env = {
       "GTH_STATE_FILE_PATH": "",
