@@ -161,7 +161,7 @@ class TestLoadConfig:
     assert config.targets[0].settings.min_missing_percent == 0.0
     assert config.log_level == "INFO"
     assert config.metrics_enabled is True
-    assert config.metrics_port == 9090
+    assert config.listen_port == 9090
     assert config.shutdown_timeout_s == 30.0
 
   def test_load_config_with_overrides(self) -> None:
@@ -170,7 +170,7 @@ class TestLoadConfig:
       env = {
         "GTH_LOG_LEVEL": "debug",
         "GTH_METRICS_ENABLED": "false",
-        "GTH_METRICS_PORT": "8080",
+        "GTH_LISTEN_PORT": "8080",
         "GTH_STATE_FILE_PATH": str(state_path),
         "GTH_OPS_PER_INTERVAL": "5",
         "GTH_INTERVAL_S": "120",
@@ -186,7 +186,7 @@ class TestLoadConfig:
       config = load_config(env)
       assert config.log_level == "DEBUG"
       assert config.metrics_enabled is False
-      assert config.metrics_port == 8080
+      assert config.listen_port == 8080
       assert config.state_file_path == str(state_path)
       assert config.ops_per_interval == 5
       assert config.interval_s == 120
@@ -367,6 +367,42 @@ class TestLoadConfig:
     assert len(config.targets) == 2
     assert config.targets[0].name == "radarr1"
     assert config.targets[1].name == "sonarr1"
+
+  def test_load_config_rejects_duplicate_target_names(self) -> None:
+    """Duplicate GTH_ARR_<n>_NAME values must be rejected."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "same-name",
+      "GTH_ARR_0_BASEURL": "http://radarr1:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "same-name",
+      "GTH_ARR_1_BASEURL": "http://sonarr1:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+    }
+    with pytest.raises(ValueError, match="Duplicate target names: same-name"):
+      load_config(env)
+
+  def test_load_config_rejects_duplicate_target_names_three_targets(self) -> None:
+    """Multiple duplicates must all be reported."""
+    env = {
+      "GTH_STATE_FILE_PATH": "",
+      "GTH_ARR_0_TYPE": "radarr",
+      "GTH_ARR_0_NAME": "dup",
+      "GTH_ARR_0_BASEURL": "http://a:7878",
+      "GTH_ARR_0_APIKEY": "key1",
+      "GTH_ARR_1_TYPE": "sonarr",
+      "GTH_ARR_1_NAME": "other",
+      "GTH_ARR_1_BASEURL": "http://b:8989",
+      "GTH_ARR_1_APIKEY": "key2",
+      "GTH_ARR_2_TYPE": "radarr",
+      "GTH_ARR_2_NAME": "dup",
+      "GTH_ARR_2_BASEURL": "http://c:7878",
+      "GTH_ARR_2_APIKEY": "key3",
+    }
+    with pytest.raises(ValueError, match="Duplicate target names: dup"):
+      load_config(env)
 
   def test_load_config_missing_required_raises(self) -> None:
     env = {
@@ -763,19 +799,19 @@ class TestConfigValidation:
           pass
 
   @pytest.mark.parametrize("invalid_port", [0, -1])
-  def test_config_validates_metrics_port_positive(self, invalid_port: int) -> None:
-    """Test that Config validates metrics_port is positive."""
+  def test_config_validates_listen_port_positive(self, invalid_port: int) -> None:
+    """Test that Config validates listen_port is positive."""
     with tempfile.TemporaryDirectory() as tmpdir:
       state_path = Path(tmpdir) / "state.yaml"
       with pytest.raises(ValidationError):
-        Config(metrics_port=invalid_port, state_file_path=str(state_path))
+        Config(listen_port=invalid_port, state_file_path=str(state_path))
 
-  def test_config_validates_metrics_port_valid(self) -> None:
-    """Test that Config accepts valid metrics_port."""
+  def test_config_validates_listen_port_valid(self) -> None:
+    """Test that Config accepts valid listen_port."""
     with tempfile.TemporaryDirectory() as tmpdir:
       state_path = Path(tmpdir) / "state.yaml"
-      config = Config(metrics_port=9090, state_file_path=str(state_path))
-      assert config.metrics_port == 9090
+      config = Config(listen_port=9090, state_file_path=str(state_path))
+      assert config.listen_port == 9090
 
   @pytest.mark.parametrize("invalid_value", [0, -1])
   def test_config_validates_ops_per_interval_positive(self, invalid_value: int) -> None:
@@ -938,11 +974,11 @@ class TestLoadConfigValidation:
     with pytest.raises(ValidationError, match="greater than or equal to 1"):
       load_config(env)
 
-  def test_load_config_validates_config_metrics_port_positive(self) -> None:
-    """Test that load_config validates Config metrics_port is positive."""
+  def test_load_config_validates_config_listen_port_positive(self) -> None:
+    """Test that load_config validates Config listen_port is positive."""
     env = {
       "GTH_STATE_FILE_PATH": "",
-      "GTH_METRICS_PORT": "0",
+      "GTH_LISTEN_PORT": "0",
       "GTH_ARR_0_TYPE": "radarr",
       "GTH_ARR_0_NAME": "test",
       "GTH_ARR_0_BASEURL": "http://localhost:7878",
@@ -955,7 +991,7 @@ class TestLoadConfigValidation:
     """Test that load_config validates all targets, not just the first."""
     # Save and clear potentially conflicting env vars
     saved_env = {}
-    for key in ["GTH_METRICS_PORT", "GTH_OPS_PER_INTERVAL", "GTH_INTERVAL_S"]:
+    for key in ["GTH_LISTEN_PORT", "GTH_OPS_PER_INTERVAL", "GTH_INTERVAL_S"]:
       if key in os.environ:
         saved_env[key] = os.environ.pop(key)
 
@@ -982,7 +1018,7 @@ class TestLoadConfigValidation:
     """Test that load_config validates missing name when type is present."""
     # Save and clear potentially conflicting env vars
     saved_env = {}
-    for key in ["GTH_METRICS_PORT", "GTH_OPS_PER_INTERVAL", "GTH_INTERVAL_S"]:
+    for key in ["GTH_LISTEN_PORT", "GTH_OPS_PER_INTERVAL", "GTH_INTERVAL_S"]:
       if key in os.environ:
         saved_env[key] = os.environ.pop(key)
 
@@ -1003,7 +1039,7 @@ class TestLoadConfigValidation:
     """Test that load_config validates missing baseurl when name is present."""
     # Save and clear potentially conflicting env vars
     saved_env = {}
-    for key in ["GTH_METRICS_PORT", "GTH_OPS_PER_INTERVAL", "GTH_INTERVAL_S"]:
+    for key in ["GTH_LISTEN_PORT", "GTH_OPS_PER_INTERVAL", "GTH_INTERVAL_S"]:
       if key in os.environ:
         saved_env[key] = os.environ.pop(key)
 
@@ -1024,7 +1060,7 @@ class TestLoadConfigValidation:
     """Test that load_config validates missing apikey when baseurl is present."""
     # Save and clear potentially conflicting env vars
     saved_env = {}
-    for key in ["GTH_METRICS_PORT", "GTH_OPS_PER_INTERVAL", "GTH_INTERVAL_S"]:
+    for key in ["GTH_LISTEN_PORT", "GTH_OPS_PER_INTERVAL", "GTH_INTERVAL_S"]:
       if key in os.environ:
         saved_env[key] = os.environ.pop(key)
 

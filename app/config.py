@@ -284,8 +284,8 @@ class Config(BaseSettings):
 
   log_level: str = "INFO"
   metrics_enabled: bool = True
-  metrics_address: str = "0.0.0.0"
-  metrics_port: int = Field(default=9090, ge=1)
+  listen_address: str = "0.0.0.0"
+  listen_port: int = Field(default=9090, ge=1)
   state_file_path: str | None = "/data/state.yaml"
   ops_per_interval: int = Field(default=1, ge=1)
   interval_s: int = Field(default=60, ge=1)
@@ -326,12 +326,12 @@ class Config(BaseSettings):
     result = logging.getLevelName(logging.INFO)
     return str(result)
 
-  @field_validator("metrics_address")
+  @field_validator("listen_address")
   @classmethod
-  def validate_metrics_address(cls, v: str) -> str:
-    """Validate metrics_address is a valid IP address or hostname."""
+  def validate_listen_address(cls, v: str) -> str:
+    """Validate listen_address is a valid IP address or hostname."""
     if not v or not v.strip():
-      raise ValueError("metrics_address must be non-empty")
+      raise ValueError("listen_address must be non-empty")
     address = v.strip()
 
     # Try parsing as IP address first
@@ -351,7 +351,7 @@ class Config(BaseSettings):
     if hostname_pattern.match(address):
       return address
 
-    raise ValueError(f"metrics_address must be a valid IP address or hostname, got: {address}")
+    raise ValueError(f"listen_address must be a valid IP address or hostname, got: {address}")
 
   @field_validator("state_file_path")
   @classmethod
@@ -461,6 +461,16 @@ def load_config(env: dict[str, str] | None = None) -> Config:
 
   if not targets:
     raise ValueError("At least one *arr target must be configured (GTH_ARR_0_*)")
+
+  name_counts: dict[str, int] = {}
+  for t in targets:
+    name_counts[t.name] = name_counts.get(t.name, 0) + 1
+  duplicates = [name for name, count in name_counts.items() if count > 1]
+  if duplicates:
+    raise ValueError(
+      f"Duplicate target names: {', '.join(sorted(duplicates))}. "
+      "Each target must have a unique name (GTH_ARR_<n>_NAME)."
+    )
 
   if unused_gth_keys:
     # Preserve original case from env for error message

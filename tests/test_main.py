@@ -24,3 +24,25 @@ class TestMainModule:
   def test_start_web_server_function_exists(self) -> None:
     """Test that the start_web_server function exists and is callable."""
     assert callable(start_web_server)
+
+  def test_health_endpoint_always_available(self) -> None:
+    """Health endpoint is served regardless of metrics_enabled."""
+    app = create_web_app(metrics_enabled=False)
+    client = app.test_client()
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.get_data(as_text=True) == "OK"
+
+  def test_metrics_endpoint_404_when_disabled(self) -> None:
+    """Metrics endpoint returns 404 when metrics_enabled is False."""
+    app = create_web_app(metrics_enabled=False)
+    client = app.test_client()
+    response = client.get("/metrics")
+    assert response.status_code == 404
+
+  def test_metrics_endpoint_available_when_enabled(self) -> None:
+    """Metrics endpoint is served when metrics_enabled is True."""
+    app = create_web_app(metrics_enabled=True)
+    client = app.test_client()
+    response = client.get("/metrics")
+    assert response.status_code == 200
