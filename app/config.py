@@ -462,6 +462,16 @@ def load_config(env: dict[str, str] | None = None) -> Config:
   if not targets:
     raise ValueError("At least one *arr target must be configured (GTH_ARR_0_*)")
 
+  name_counts: dict[str, int] = {}
+  for t in targets:
+    name_counts[t.name] = name_counts.get(t.name, 0) + 1
+  duplicates = [name for name, count in name_counts.items() if count > 1]
+  if duplicates:
+    raise ValueError(
+      f"Duplicate target names: {', '.join(sorted(duplicates))}. "
+      "Each target must have a unique name (GTH_ARR_<n>_NAME)."
+    )
+
   if unused_gth_keys:
     # Preserve original case from env for error message
     gth_key_to_original: dict[str, str] = {
