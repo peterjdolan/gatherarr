@@ -32,12 +32,10 @@ dev = [
 ]
 
 [tool.poe.tasks]
-check = ["generate-clients", "format", "lint", "type-check", "test"]
+build = ["generate-radarr", "generate-sonarr"]
+check = ["build", "format", "lint", "type-check", "test"]
 check-e2e = ["check", "test-e2e"]
-generate-clients = ["generate-radarr", "generate-sonarr"]
-generate-radarr = ["generate-radarr-cmd", "patch-radarr-movie"]
-generate-radarr-cmd = "openapi-python-client generate --path context/radarr_api.json --output-path app/radarr_client --meta none --overwrite"
-patch-radarr-movie = "python -c \"import pathlib; p=pathlib.Path('app/radarr_client/api/movie/get_api_v3_movie.py'); p.write_text(p.read_text().replace('_response_200 = response.text', '_response_200 = response.json()'))\""
+generate-radarr = "openapi-python-client generate --path context/radarr_api.json --output-path app/radarr_client --meta none --overwrite"
 generate-sonarr = "openapi-python-client generate --path context/sonarr_api.json --output-path app/sonarr_client --meta none --overwrite"
 format = "ruff format ."
 format-check = "ruff format --check ."

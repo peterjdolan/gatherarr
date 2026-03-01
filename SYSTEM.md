@@ -111,7 +111,7 @@ Item identifiers extend `ItemId`:
 - **HTTP layer:** One `httpx.AsyncClient` per target (base_url, X-Api-Key, timeout). Injected for tests; created internally in production.
 - **Retries:** Tenacity for network errors, timeouts, 5xx, 429. Configurable `http_max_retries`, `http_retry_initial_delay_s`, `http_retry_backoff_exponent`, `http_retry_max_delay_s` (global and per-target).
 - **Auth:** `X-Api-Key` header per target.
-- **Endpoints:** Radarr `GET /api/v3/movie` (via generated client), `POST /api/v3/command` (MoviesSearch); Sonarr `GET /api/v3/series` (via generated client), flatten to seasons, `POST /api/v3/command` (SeasonSearch).
+- **Endpoints:** Radarr `GET /api/v3/movie`, `POST /api/v3/command` (MoviesSearch); Sonarr `GET /api/v3/series`, flatten to seasons, `POST /api/v3/command` (SeasonSearch). GET responses are parsed with OpenAPI-generated `MovieResource.from_dict` and `SeriesResource.from_dict` for strict schema adherence.
 
 **Assumption:** *arr API contracts (JSON shape, field names) are stable; no defensive type checks per AGENTS.md.
 

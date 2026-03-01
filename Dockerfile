@@ -14,7 +14,7 @@ COPY app/ ./app/
 
 # Install dependencies (with dev for openapi-python-client) and generate API clients
 RUN uv sync --frozen
-RUN uv run poe generate-clients
+RUN uv run poe build
 
 # Downgrade builder venv to production deps only (smaller image)
 RUN uv sync --frozen --no-dev

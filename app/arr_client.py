@@ -19,10 +19,8 @@ from tenacity import (
 from app.action_logging import Action
 from app.config import ArrTarget, ArrType
 from app.metrics import request_errors_total, requests_total
-from app.radarr_client import Client as RadarrClient
-from app.radarr_client.api.movie import get_api_v3_movie
-from app.sonarr_client import Client as SonarrClient
-from app.sonarr_client.api.series import get_api_v3_series
+from app.radarr_client.models.movie_resource import MovieResource
+from app.sonarr_client.models.series_resource import SeriesResource
 
 if TYPE_CHECKING:
   from app.handlers import MovieId, SeasonId
@@ -52,9 +50,6 @@ def _series_resource_to_dict(series: Any) -> dict[str, Any]:
 
 class ArrClient:
   """Client for interacting with *arr APIs."""
-
-  _radarr_client: RadarrClient | None
-  _sonarr_client: SonarrClient | None
 
   def __init__(
     self,
@@ -100,25 +95,6 @@ class ArrClient:
       self._owns_client = True
     else:
       self._owns_client = False
-
-    self._radarr_client = None
-    self._sonarr_client = None
-    if target.arr_type == ArrType.RADARR:
-      radarr_client = RadarrClient(
-        base_url=self.base_url,
-        headers=headers,
-        timeout=timeout,
-      )
-      radarr_client.set_async_httpx_client(self._http_client)
-      self._radarr_client = radarr_client
-    else:
-      sonarr_client = SonarrClient(
-        base_url=self.base_url,
-        headers=headers,
-        timeout=timeout,
-      )
-      sonarr_client.set_async_httpx_client(self._http_client)
-      self._sonarr_client = sonarr_client
 
   async def aclose(self) -> None:
     """Close the underlying HTTP client if owned."""
@@ -209,47 +185,25 @@ class ArrClient:
       raise
 
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict[str, Any]]:
-    """Get all movies from Radarr using the OpenAPI-generated client."""
+    """Get all movies from Radarr. Uses OpenAPI-generated MovieResource for parsing."""
     if self.target.arr_type != ArrType.RADARR:
       raise ValueError(f"get_movies() only supported for radarr, got {self.target.arr_type}")
-    if self._radarr_client is None:
-      raise ValueError("Radarr client not initialized")
 
+    url = f"{self.base_url}/api/v3/movie"
     get_movies_logging_ids = {
       "action": Action.GET_MOVIES,
-      "url": f"{self.base_url}/api/v3/movie",
+      "url": url,
       **logging_ids,
       **self.target.logging_ids(),
     }
     logger.debug("Fetching movies", **get_movies_logging_ids)
-
-    radarr_client = self._radarr_client
-    if radarr_client is None:
-      raise ValueError("Radarr client not initialized")
-
-    retry_decorator = self._make_retry_decorator()
-    target_name = self.target.name
-    arr_type = self.target.arr_type.value
-    requests_total.labels(
-      target=target_name, type=arr_type, operation=Action.GET_MOVIES.value
-    ).inc()
-
-    @retry_decorator
-    async def _do_fetch() -> list[dict[str, Any]]:
-      assert radarr_client is not None
-      result = await get_api_v3_movie.asyncio(client=radarr_client)
-      if result is None:
-        return []
-      return [_movie_resource_to_dict(m) for m in result]
-
     try:
-      movies: list[dict[str, Any]] = await _do_fetch()
+      result = await self._request("GET", url, Action.GET_MOVIES, get_movies_logging_ids)
+      raw_list = result if isinstance(result, list) else []
+      movies = [_movie_resource_to_dict(MovieResource.from_dict(m)) for m in raw_list]
       logger.debug("Fetched movies", movie_count=len(movies), **get_movies_logging_ids)
       return movies
     except Exception as e:
-      request_errors_total.labels(
-        target=target_name, type=arr_type, operation=Action.GET_MOVIES.value
-      ).inc()
       logger.exception(
         "Exception while fetching movies",
         exception=e,
@@ -301,42 +255,23 @@ class ArrClient:
     return seasons
 
   async def get_seasons(self, logging_ids: dict[str, Any]) -> list[dict[str, Any]]:
-    """Get season-level search items from Sonarr using the OpenAPI-generated client."""
+    """Get season-level search items from Sonarr. Uses OpenAPI-generated SeriesResource for parsing."""
     if self.target.arr_type != ArrType.SONARR:
       raise ValueError(f"get_seasons() only supported for sonarr, got {self.target.arr_type}")
-    if self._sonarr_client is None:
-      raise ValueError("Sonarr client not initialized")
 
+    url = f"{self.base_url}/api/v3/series"
     get_seasons_logging_ids = {
       "action": Action.GET_SEASONS,
-      "url": f"{self.base_url}/api/v3/series",
+      "url": url,
       **logging_ids,
       **self.target.logging_ids(),
     }
     logger.debug("Fetching series for season extraction", **get_seasons_logging_ids)
-
-    retry_decorator = self._make_retry_decorator()
-    target_name = self.target.name
-    arr_type = self.target.arr_type.value
-    requests_total.labels(
-      target=target_name, type=arr_type, operation=Action.GET_SEASONS.value
-    ).inc()
-
-    sonarr_client = self._sonarr_client
-    if sonarr_client is None:
-      raise ValueError("Sonarr client not initialized")
-
-    @retry_decorator
-    async def _do_fetch() -> list[dict[str, Any]]:
-      assert sonarr_client is not None
-      result = await get_api_v3_series.asyncio(client=sonarr_client)
-      if result is None:
-        return []
-      series_dicts = [_series_resource_to_dict(s) for s in result]
-      return self._extract_seasons_from_series(series_dicts, get_seasons_logging_ids)
-
     try:
-      season_items: list[dict[str, Any]] = await _do_fetch()
+      result = await self._request("GET", url, Action.GET_SEASONS, get_seasons_logging_ids)
+      raw_list = result if isinstance(result, list) else []
+      series_dicts = [_series_resource_to_dict(SeriesResource.from_dict(s)) for s in raw_list]
+      season_items = self._extract_seasons_from_series(series_dicts, get_seasons_logging_ids)
       logger.debug(
         "Fetched seasons",
         season_count=len(season_items),
@@ -344,9 +279,6 @@ class ArrClient:
       )
       return season_items
     except Exception as e:
-      request_errors_total.labels(
-        target=target_name, type=arr_type, operation=Action.GET_SEASONS.value
-      ).inc()
       logger.exception(
         "Exception while fetching seasons",
         exception=e,
