@@ -66,7 +66,7 @@ The single entry point. Responsibilities:
 - **Purpose:** Emit an easily readable copy of full configuration at startup so users can verify per-target configuration.
 - **Format:** Text banner with global settings and per-target settings (name, type, base_url, resolved overrides).
 - **Security:** API keys are omitted; displayed as `[REDACTED]`.
-- **Timing:** Logged at INFO level immediately after logging is configured, before scheduler starts.
+- **Timing:** Printed directly to stdout immediately after logging is configured, before scheduler starts. Uses `print()` rather than the logging module so the banner's formatting is preserved (no JSON wrapping or log metadata).
 
 ### Scheduler (`app/scheduler.py`)
 
