@@ -102,14 +102,14 @@ class ArrClient:
     self,
     method: str,
     url: str,
-    operation: str,
+    operation: Action,
     logging_ids: dict[str, Any],
     payload: dict[str, Any] | None = None,
   ) -> Any:
     """Make HTTP request with retry logic using tenacity."""
     target_name = self.target.name
     arr_type = self.target.arr_type.value
-    requests_total.labels(target=target_name, type=arr_type, operation=operation).inc()
+    requests_total.labels(target=target_name, type=arr_type, operation=operation.value).inc()
 
     request_logging_ids = {
       "method": method,
@@ -147,7 +147,9 @@ class ArrClient:
     try:
       return await _do_request()
     except Exception as e:
-      request_errors_total.labels(target=target_name, type=arr_type, operation=operation).inc()
+      request_errors_total.labels(
+        target=target_name, type=arr_type, operation=operation.value
+      ).inc()
       logger.exception(
         "Exception while making HTTP request",
         exception=e,
