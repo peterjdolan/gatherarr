@@ -6,12 +6,17 @@ WORKDIR /build
 # Install uv
 COPY --from=uv /uv /usr/local/bin/uv
 
-# Copy dependency files
+# Copy dependency files and OpenAPI specs
 COPY pyproject.toml ./
 COPY uv.lock* ./
+COPY context/ ./context/
+COPY app/ ./app/
 
-# Install dependencies using uv into a virtual environment
-# uv sync creates a .venv directory with all dependencies
+# Install dependencies (with dev for openapi-python-client) and generate API clients
+RUN uv sync --frozen
+RUN uv run poe build
+
+# Downgrade builder venv to production deps only (smaller image)
 RUN uv sync --frozen --no-dev
 
 # Runtime stage
@@ -19,12 +24,9 @@ FROM dhi.io/python:3.14
 
 WORKDIR /app
 
-# Copy the virtual environment from builder
-# uv creates .venv in the working directory
+# Copy the virtual environment and application from builder
 COPY --from=builder /build/.venv /app/.venv
-
-# Copy application code
-COPY app/ ./app/
+COPY --from=builder /build/app ./app
 
 # Make sure we use the virtual environment's Python
 ENV PATH="/app/.venv/bin:$PATH"

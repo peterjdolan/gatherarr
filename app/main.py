@@ -6,14 +6,12 @@ import signal
 import sys
 import threading
 
-import httpx
 import structlog
 from flask import Flask, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.arr_client import ArrClient
 from app.config import load_config
-from app.http_client import HttpxClient
 from app.log_redaction import redact_sensitive_fields
 from app.scheduler import Scheduler
 from app.startup_banner import format_banner
@@ -117,14 +115,10 @@ async def main() -> None:
   state_manager.load()
   logger.debug("State loaded", targets=len(state_manager.state.targets))
 
-  http_client_instance = httpx.AsyncClient()
-  http_client = HttpxClient(http_client_instance)
-
   arr_clients: dict[str, ArrClient] = {}
   for target in config.targets:
     arr_clients[target.name] = ArrClient(
       target=target,
-      http_client=http_client,
       timeout_s=target.settings.http_timeout_s,
     )
 
@@ -171,9 +165,10 @@ async def main() -> None:
     except asyncio.CancelledError:
       logger.debug("Scheduler task cancelled")
 
-    logger.debug("Closing HTTP client")
-    await http_client_instance.aclose()
-    logger.debug("HTTP client closed")
+    logger.debug("Closing Arr clients")
+    for arr_client in arr_clients.values():
+      await arr_client.aclose()
+    logger.debug("Arr clients closed")
 
     logger.debug("Application shutdown complete")
 

@@ -5,9 +5,21 @@ from typing import Any, Protocol
 import httpx
 import structlog
 
-from app.arr_client import HttpClient
-
 logger = structlog.get_logger()
+
+
+class HttpClient(Protocol):
+  """Protocol for HTTP client operations (get/post with full URL)."""
+
+  async def get(self, url: str, headers: dict[str, str], timeout: float) -> Any:
+    """Make GET request."""
+    ...
+
+  async def post(
+    self, url: str, headers: dict[str, str], timeout: float, payload: dict[str, Any] | None = None
+  ) -> Any:
+    """Make POST request."""
+    ...
 
 
 class AsyncHttpClient(Protocol):

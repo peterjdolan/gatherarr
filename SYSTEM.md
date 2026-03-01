@@ -24,7 +24,8 @@ flowchart TD
     Scheduler["app/scheduler.py<br>run_once, _process_items<br>ItemHandler dispatch"]
     Handlers["app/handlers<br>MovieHandler, SeasonHandler"]
     ArrClient["app/arr_client<br>ArrClient<br>get_movies, get_seasons<br>search_movie, search_season"]
-    HttpClient["app/http_client<br>HttpxClient, HttpClient"]
+    RadarrClient["app/radarr_client<br>OpenAPI-generated"]
+    SonarrClient["app/sonarr_client<br>OpenAPI-generated"]
 
     Main --> Config
     Main --> Banner
@@ -32,7 +33,8 @@ flowchart TD
     Main --> Scheduler
     Scheduler --> Handlers
     Scheduler --> ArrClient
-    ArrClient --> HttpClient
+    ArrClient --> RadarrClient
+    ArrClient --> SonarrClient
 ```
 
 ### Main Module (`app/main.py`)
@@ -43,7 +45,7 @@ The single entry point. Responsibilities:
 2. **Setup logging** — Structured JSON logging via structlog; sensitive fields redacted.
 3. **Startup banner** — Emits full configuration to logs (global and per-target) via `format_banner()`. API keys are redacted.
 4. **State** — Chooses `FileStateStorage` or `InMemoryStateStorage` (when `state_file_path` is None). Loads state on startup.
-5. **HTTP and Arr clients** — Creates a shared `httpx.AsyncClient` and `HttpxClient` wrapper; one `ArrClient` per target.
+5. **HTTP and Arr clients** — Creates one `ArrClient` per target. Each ArrClient uses OpenAPI-generated Radarr/Sonarr client stubs and an `httpx.AsyncClient` (one per target with base_url).
 6. **Scheduler** — Starts async scheduler loop. Runs until shutdown signal.
 7. **Web server** — Flask always serves `/health` in a daemon thread; when metrics enabled, `/metrics` is also served. Both use `listen_address` and `listen_port`.
 8. **Shutdown** — On SIGTERM/SIGINT: stop scheduler, cancel task, close HTTP client.
@@ -105,10 +107,11 @@ Item identifiers extend `ItemId`:
 
 ### ArrClient (`app/arr_client.py`)
 
-- **HTTP layer:** Uses `HttpClient` protocol (injected; real impl: `HttpxClient`).
+- **OpenAPI-generated clients:** Uses `openapi-python-client` to generate type-safe client stubs from `context/radarr_api.json` and `context/sonarr_api.json`. Regenerate with `uv run poe generate-clients`.
+- **HTTP layer:** One `httpx.AsyncClient` per target (base_url, X-Api-Key, timeout). Injected for tests; created internally in production.
 - **Retries:** Tenacity for network errors, timeouts, 5xx, 429. Configurable `http_max_retries`, `http_retry_initial_delay_s`, `http_retry_backoff_exponent`, `http_retry_max_delay_s` (global and per-target).
 - **Auth:** `X-Api-Key` header per target.
-- **Endpoints:** Radarr `GET /api/v3/movie`, `POST /api/v3/command` (MoviesSearch); Sonarr `GET /api/v3/series`, flatten to seasons, `POST /api/v3/command` (SeasonSearch).
+- **Endpoints:** Radarr `GET /api/v3/movie`, `POST /api/v3/command` (MoviesSearch); Sonarr `GET /api/v3/series`, flatten to seasons, `POST /api/v3/command` (SeasonSearch). GET responses are parsed with OpenAPI-generated `MovieResource.from_dict` and `SeriesResource.from_dict` for strict schema adherence.
 
 **Assumption:** *arr API contracts (JSON shape, field names) are stable; no defensive type checks per AGENTS.md.
 

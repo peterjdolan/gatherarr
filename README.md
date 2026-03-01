@@ -166,6 +166,14 @@ Attach to the included devcontainer, and run
 uv sync
 ```
 
+### API client generation
+
+Radarr and Sonarr client stubs are generated from OpenAPI specs in `context/`. They are not committed; `uv run poe check` and the Docker build run `uv run poe build` automatically. To regenerate manually:
+
+```bash
+uv run poe build
+```
+
 ### Verifying changes
 
 - Incremental: `uv run poe check`
