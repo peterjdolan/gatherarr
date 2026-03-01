@@ -89,7 +89,6 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 |----------|-------------|---------|
 | `GTH_LISTEN_ADDRESS` | Listen address for health and metrics endpoints | `0.0.0.0` |
 | `GTH_LISTEN_PORT` | Listen port for the HTTP server | `9090` |
-| `GTH_HTTP_TIMEOUT_S` | Timeout in seconds for all external HTTP calls to *arr APIs | `30` |
 | `GTH_METRICS_ENABLED` | Host the Prometheus metrics endpoint (`/metrics`). Health endpoint (`/health`) is always served | `false` |
 
 #### Request and search retry
@@ -98,6 +97,7 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `GTH_HTTP_TIMEOUT_S` | Timeout in seconds for all external HTTP calls to *arr APIs | `30` |
 | `GTH_HTTP_MAX_RETRIES` | Maximum HTTP retry attempts per request | `3` |
 | `GTH_HTTP_RETRY_INITIAL_DELAY_S` | Initial retry delay in seconds | `1.0` |
 | `GTH_HTTP_RETRY_BACKOFF_EXPONENT` | Exponential backoff multiplier | `2.0` |
@@ -132,8 +132,7 @@ All global options may be overridden per target with `GTH_ARR_<n>_<OPTION>`. The
 | Section | Overridable variables |
 |---------|-----------------------|
 | **Base** | `GTH_ARR_<n>_OPS_PER_INTERVAL`, `GTH_ARR_<n>_INTERVAL_S`, `GTH_ARR_<n>_ITEM_REVISIT_S`, `GTH_ARR_<n>_REQUIRE_MONITORED`, `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`, `GTH_ARR_<n>_REQUIRE_RELEASED`, `GTH_ARR_<n>_INCLUDE_TAGS`, `GTH_ARR_<n>_EXCLUDE_TAGS`, `GTH_ARR_<n>_MIN_MISSING_EPISODES`, `GTH_ARR_<n>_MIN_MISSING_PERCENT`, `GTH_ARR_<n>_DRY_RUN` |
-| **HTTP** | `GTH_ARR_<n>_HTTP_TIMEOUT_S` |
-| **Retry** | `GTH_ARR_<n>_HTTP_MAX_RETRIES`, `GTH_ARR_<n>_HTTP_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_HTTP_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_HTTP_RETRY_MAX_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_ATTEMPTS`, `GTH_ARR_<n>_SEARCH_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_DELAY_S` |
+| **Retry** | `GTH_ARR_<n>_HTTP_TIMEOUT_S`, `GTH_ARR_<n>_HTTP_MAX_RETRIES`, `GTH_ARR_<n>_HTTP_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_HTTP_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_HTTP_RETRY_MAX_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_ATTEMPTS`, `GTH_ARR_<n>_SEARCH_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_DELAY_S` |
 
 ## Metrics
 
