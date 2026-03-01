@@ -133,10 +133,10 @@ Applied when an item's search fails; determines how long to wait before retrying
 ### Metrics (minimum)
 
 - `gatherarr_run_total{target,type,status}` counter
-- `gatherarr_requests_total{target,type}` counter
+- `gatherarr_requests_total{target,type,operation}` counter
 - `gatherarr_grabs_total{target,type}` counter
 - `gatherarr_skips_total{target,type}` counter
-- `gatherarr_request_errors_total{target,type}` counter
+- `gatherarr_request_errors_total{target,type,operation}` counter
 - `gatherarr_request_duration_seconds{target,type}` histogram (distribution of individual request durations)
 - `gatherarr_last_success_timestamp_seconds{target,type}` gauge
 - `gatherarr_state_write_failures_total` counter

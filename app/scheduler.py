@@ -14,8 +14,6 @@ from app.metrics import (
   grabs_total,
   last_success_timestamp_seconds,
   request_duration_seconds,
-  request_errors_total,
-  requests_total,
   run_total,
   skips_total,
   state_write_failures_total,
@@ -132,7 +130,6 @@ class Scheduler:
       combined_logging_ids.update(target_state.logging_ids())
 
       run_total.labels(target=target.name, type=target.arr_type.value, status="error").inc()
-      request_errors_total.labels(target=target.name, type=target.arr_type.value).inc()
 
       logger.exception(
         "Run failed",
@@ -308,7 +305,6 @@ class Scheduler:
 
       try:
         request_start = time.time()
-        requests_total.labels(target=target.name, type=target.arr_type.value).inc()
         await item_handler.search(
           client=client,
           item=item,
@@ -377,7 +373,6 @@ class Scheduler:
           exception=e,
           **item_logging_ids,
         )
-        request_errors_total.labels(target=target.name, type=target.arr_type.value).inc()
 
     logger.debug(
       "Finished processing items",

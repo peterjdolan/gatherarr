@@ -11,13 +11,13 @@ run_total = Counter(
 requests_total = Counter(
   "gatherarr_requests_total",
   "Total number of API requests",
-  ["target", "type"],
+  ["target", "type", "operation"],
 )
 
 request_errors_total = Counter(
   "gatherarr_request_errors_total",
   "Total number of request errors",
-  ["target", "type"],
+  ["target", "type", "operation"],
 )
 
 grabs_total = Counter(

@@ -28,9 +28,15 @@ class TestMetrics:
     assert run_total.labels(target="test", type="radarr", status="success")._value.get() == 1.0
 
   def test_counter_increment(self) -> None:
-    requests_total.labels(target="test", type="radarr").inc()
-    requests_total.labels(target="test", type="radarr").inc()
-    assert requests_total.labels(target="test", type="radarr")._value.get() == 2.0
+    # Use unique target to avoid collision with arr_client tests that use target="test"
+    requests_total.labels(target="test-metrics", type="radarr", operation="get_movies").inc()
+    requests_total.labels(target="test-metrics", type="radarr", operation="get_movies").inc()
+    assert (
+      requests_total.labels(
+        target="test-metrics", type="radarr", operation="get_movies"
+      )._value.get()
+      == 2.0
+    )
 
   def test_gauge_set(self) -> None:
     last_success_timestamp_seconds.labels(target="test", type="radarr").set(1234.0)
