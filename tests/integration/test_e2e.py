@@ -438,7 +438,12 @@ async def test_metrics_endpoint_exposes_target_metrics_after_scheduler_run(tmp_p
   assert_metric_line(
     metrics_text,
     "gatherarr_requests_total",
-    ['target="integration-metrics"', 'type="radarr"'],
+    ['target="integration-metrics"', 'type="radarr"', 'operation="get_movies"'],
+  )
+  assert_metric_line(
+    metrics_text,
+    "gatherarr_requests_total",
+    ['target="integration-metrics"', 'type="radarr"', 'operation="search_movie"'],
   )
   assert_metric_line(
     metrics_text,

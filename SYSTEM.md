@@ -126,7 +126,7 @@ Item identifiers extend `ItemId`:
 - **Structured logs:** structlog, JSON to stdout/stderr. Correlation fields: `target_name`, `target_type`, `run_id`, `movie_id`/`series_id`/`season_number`.
 - **Redaction:** `log_redaction.redact_sensitive_fields` removes `api_key`, `apikey`, `x-api-key`, etc. from all log output.
 - **Log levels:** INFO for actions that affect targets (searches); DEBUG for fetches, internal steps.
-- **Health:** `/health` always served for liveness/readiness. **Metrics:** Prometheus counters/gauges/histograms; served on `/metrics` when enabled.
+- **Health:** `/health` always served for liveness/readiness. **Metrics:** Prometheus counters/gauges/histograms; served on `/metrics` when enabled. `gatherarr_requests_total` and `gatherarr_request_errors_total` are recorded in ArrClient for every API request (list movies/series and execute searches), broken down by target (server), type (radarr/sonarr), and operation (get_movies, get_seasons, search_movie, search_season).
 
 ## Design Decisions and Assumptions
 

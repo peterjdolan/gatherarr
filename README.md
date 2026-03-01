@@ -118,8 +118,8 @@ Gatherarr always serves a health endpoint at `/health` for liveness and readines
 | Metric | Type | Description | Labels |
 |--------|------|-------------|--------|
 | `gatherarr_run_total` | Counter | Total number of scheduler runs | `target`, `type` (radarr/sonarr), `status` (success/error) |
-| `gatherarr_requests_total` | Counter | Total number of *arr API requests (item searches) | `target`, `type` |
-| `gatherarr_request_errors_total` | Counter | Total number of failed API requests | `target`, `type` |
+| `gatherarr_requests_total` | Counter | Total number of *arr API requests (list movies/series + execute searches) | `target`, `type`, `operation` |
+| `gatherarr_request_errors_total` | Counter | Total number of failed API requests | `target`, `type`, `operation` |
 | `gatherarr_grabs_total` | Counter | Total number of items searched (grabs) | `target`, `type` |
 | `gatherarr_skips_total` | Counter | Total number of items skipped (eligibility/backoff) | `target`, `type` |
 | `gatherarr_request_duration_seconds` | Histogram | Duration of search requests in seconds (buckets: 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0) | `target`, `type` |

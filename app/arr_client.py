@@ -14,6 +14,7 @@ from tenacity import (
 
 from app.action_logging import Action
 from app.config import ArrTarget, ArrType
+from app.metrics import request_errors_total, requests_total
 
 if TYPE_CHECKING:
   from app.handlers import MovieId, SeasonId
@@ -101,10 +102,15 @@ class ArrClient:
     self,
     method: str,
     url: str,
+    operation: Action,
     logging_ids: dict[str, Any],
     payload: dict[str, Any] | None = None,
   ) -> Any:
     """Make HTTP request with retry logic using tenacity."""
+    target_name = self.target.name
+    arr_type = self.target.arr_type.value
+    requests_total.labels(target=target_name, type=arr_type, operation=operation.value).inc()
+
     request_logging_ids = {
       "method": method,
       "url": url,
@@ -141,6 +147,9 @@ class ArrClient:
     try:
       return await _do_request()
     except Exception as e:
+      request_errors_total.labels(
+        target=target_name, type=arr_type, operation=operation.value
+      ).inc()
       logger.exception(
         "Exception while making HTTP request",
         exception=e,
@@ -162,7 +171,7 @@ class ArrClient:
     }
     logger.debug("Fetching movies", **get_movies_logging_ids)
     try:
-      result = await self._request("GET", url, get_movies_logging_ids)
+      result = await self._request("GET", url, Action.GET_MOVIES, get_movies_logging_ids)
       movies = cast(list[dict[str, Any]], result)
       logger.debug("Fetched movies", movie_count=len(movies), **get_movies_logging_ids)
       return movies
@@ -231,7 +240,7 @@ class ArrClient:
     }
     logger.debug("Fetching series for season extraction", **get_seasons_logging_ids)
     try:
-      result = await self._request("GET", url, get_seasons_logging_ids)
+      result = await self._request("GET", url, Action.GET_SEASONS, get_seasons_logging_ids)
       series_items = cast(list[dict[str, Any]], result)
       series_count = len(series_items)
       season_items = self._extract_seasons_from_series(series_items, get_seasons_logging_ids)
@@ -268,7 +277,7 @@ class ArrClient:
     }
     logger.debug("Searching movie", **search_logging_ids)
     try:
-      result = await self._request("POST", url, search_logging_ids, payload)
+      result = await self._request("POST", url, Action.SEARCH_MOVIE, search_logging_ids, payload)
       logger.debug("Movie searched", **search_logging_ids)
       return cast(dict[str, Any], result)
     except Exception as e:
@@ -304,7 +313,7 @@ class ArrClient:
     }
     logger.debug("Searching season", **search_logging_ids)
     try:
-      result = await self._request("POST", url, search_logging_ids, payload)
+      result = await self._request("POST", url, Action.SEARCH_SEASON, search_logging_ids, payload)
       logger.debug("Season searched", **search_logging_ids)
       return cast(dict[str, Any], result)
     except Exception as e:
