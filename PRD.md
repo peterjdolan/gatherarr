@@ -202,11 +202,6 @@ For system architecture, design decisions, and implementation details, see [SYST
 
 **Scope:** Radarr and Sonarr only.
 
-**Planned features and changes:**
-
-- **Config validation:** On startup failure, output a concise summary of all validation issues (missing vars, invalid values). Reject duplicate target names.
-- **Log redaction:** Expand sensitive-key redaction to cover `Authorization`, `Cookie`, bearer tokens, and similar.
-
 ### v0.2 (Future)
 
 **Scope:** Additional *arr apps.

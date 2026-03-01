@@ -21,7 +21,7 @@ For product requirements, see [PRD.md](PRD.md). For system architecture and desi
 
 ## Roadmap
 
-- **v0.1 (in progress):** Config validation summary and duplicate target name rejection, expanded log redaction.
+- **v0.1:** Radarr and Sonarr support.
 - **v0.2:** Lidarr and Whisparr support.
 - **v1.0:** Backwards compatibility for configuration. Until v1.0, configuration variable names and behavior may change between releases.
 
