@@ -152,7 +152,7 @@ class TestLoadConfig:
     assert config.targets[0].settings.http_timeout_s == 30.0
     assert config.targets[0].settings.require_monitored is True
     assert config.targets[0].settings.require_cutoff_unmet is True
-    assert config.targets[0].settings.released_only is False
+    assert config.targets[0].settings.require_released is True
     assert config.targets[0].settings.search_retry_initial_delay_s == 60.0
     assert config.targets[0].settings.dry_run is False
     assert config.targets[0].settings.include_tags == set()
@@ -224,7 +224,7 @@ class TestLoadConfig:
       "GTH_ITEM_REVISIT_S": "86400",
       "GTH_REQUIRE_MONITORED": "false",
       "GTH_REQUIRE_CUTOFF_UNMET": "false",
-      "GTH_RELEASED_ONLY": "true",
+      "GTH_REQUIRE_RELEASED": "true",
       "GTH_SEARCH_RETRY_INITIAL_DELAY_S": "60",
       "GTH_DRY_RUN": "true",
       "GTH_INCLUDE_TAGS": "global_inc",
@@ -241,7 +241,7 @@ class TestLoadConfig:
       "GTH_ARR_0_ITEM_REVISIT_S": "3600",
       "GTH_ARR_0_REQUIRE_MONITORED": "true",
       "GTH_ARR_0_REQUIRE_CUTOFF_UNMET": "true",
-      "GTH_ARR_0_RELEASED_ONLY": "false",
+      "GTH_ARR_0_REQUIRE_RELEASED": "false",
       "GTH_ARR_0_SEARCH_RETRY_INITIAL_DELAY_S": "120",
       "GTH_ARR_0_DRY_RUN": "false",
       "GTH_ARR_0_INCLUDE_TAGS": "radarr_tag",
@@ -260,7 +260,7 @@ class TestLoadConfig:
     assert config.item_revisit_s == 86400
     assert config.require_monitored is False
     assert config.require_cutoff_unmet is False
-    assert config.released_only is True
+    assert config.require_released is True
     assert config.search_retry_initial_delay_s == 60.0
     assert config.dry_run is True
     assert config.include_tags == "global_inc"
@@ -274,7 +274,7 @@ class TestLoadConfig:
     assert t0.settings.item_revisit_s == 3600
     assert t0.settings.require_monitored is True
     assert t0.settings.require_cutoff_unmet is True
-    assert t0.settings.released_only is False
+    assert t0.settings.require_released is False
     assert t0.settings.search_retry_initial_delay_s == 120.0
     assert t0.settings.dry_run is False
     assert t0.settings.include_tags == {"radarr_tag"}
@@ -288,7 +288,7 @@ class TestLoadConfig:
     assert t1.settings.item_revisit_s == 86400
     assert t1.settings.require_monitored is False
     assert t1.settings.require_cutoff_unmet is False
-    assert t1.settings.released_only is True
+    assert t1.settings.require_released is True
     assert t1.settings.search_retry_initial_delay_s == 60.0
     assert t1.settings.dry_run is True
     assert t1.settings.include_tags == {"global_inc"}
@@ -302,7 +302,7 @@ class TestLoadConfig:
       "GTH_STATE_FILE_PATH": "",
       "GTH_REQUIRE_MONITORED": "false",
       "GTH_REQUIRE_CUTOFF_UNMET": "false",
-      "GTH_RELEASED_ONLY": "true",
+      "GTH_REQUIRE_RELEASED": "true",
       "GTH_SEARCH_RETRY_INITIAL_DELAY_S": "120",
       "GTH_DRY_RUN": "true",
       "GTH_INCLUDE_TAGS": "global_tag",
@@ -315,7 +315,7 @@ class TestLoadConfig:
       "GTH_ARR_0_APIKEY": "key1",
       "GTH_ARR_0_REQUIRE_MONITORED": "true",
       "GTH_ARR_0_REQUIRE_CUTOFF_UNMET": "true",
-      "GTH_ARR_0_RELEASED_ONLY": "false",
+      "GTH_ARR_0_REQUIRE_RELEASED": "false",
       "GTH_ARR_0_SEARCH_RETRY_INITIAL_DELAY_S": "300",
       "GTH_ARR_0_DRY_RUN": "false",
       "GTH_ARR_0_INCLUDE_TAGS": "anime, 4k, anime",
@@ -327,7 +327,7 @@ class TestLoadConfig:
     target = config.targets[0]
     assert target.settings.require_monitored is True
     assert target.settings.require_cutoff_unmet is True
-    assert target.settings.released_only is False
+    assert target.settings.require_released is False
     assert target.settings.search_retry_initial_delay_s == 300.0
     assert target.settings.dry_run is False
     assert target.settings.include_tags == {"anime", "4k"}

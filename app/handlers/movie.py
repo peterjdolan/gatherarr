@@ -76,10 +76,10 @@ class MovieHandler:
         **logging_ids,
       )
       return False
-    if self.target.settings.released_only and not self._is_released(item):
+    if self.target.settings.require_released and not self._is_released(item):
       logger.debug(
         "Skipping movie (not released)",
-        released_only=self.target.settings.released_only,
+        require_released=self.target.settings.require_released,
         has_file=item.get("hasFile"),
         **logging_ids,
       )

@@ -55,61 +55,84 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 
 #### Per-target (required)
 
-- `GTH_ARR_<n>_TYPE`: `radarr|sonarr`.
-- `GTH_ARR_<n>_NAME`: Instance identifier for logging.
-- `GTH_ARR_<n>_BASEURL`: Base URL for the Radarr/Sonarr instance (e.g., `http://radarr:7878`).
-- `GTH_ARR_<n>_APIKEY`: API key for the instance.
+| Variable | Description |
+|----------|-------------|
+| `GTH_ARR_<n>_TYPE` | `radarr` or `sonarr` |
+| `GTH_ARR_<n>_NAME` | Instance identifier for logging |
+| `GTH_ARR_<n>_BASEURL` | Base URL for the instance (e.g., `http://radarr:7878`) |
+| `GTH_ARR_<n>_APIKEY` | API key for the instance |
 
 #### Global
 
-- `GTH_LOG_LEVEL`: (Optional) Log verbosity, `debug|info|warn|error`, default `info`.
-- `GTH_STATE_FILE_PATH`: (Optional) Path to state persistence file, default `/data/state.yaml`.
-- `GTH_OPS_PER_INTERVAL`: (Optional) Common number of operations to perform per interval time, default `1`.
-- `GTH_INTERVAL_S`: (Optional) Common interval duration in seconds, default `60`.
-- `GTH_ITEM_REVISIT_S`: (Optional) Minimum time in seconds to wait before reprocessing a previously successfully processed item, default `604800` (one week).
-- `GTH_HTTP_TIMEOUT_S`: (Optional) Timeout in seconds for all external HTTP calls to *arr APIs, default `30`.
-- `GTH_REQUIRE_MONITORED`: (Optional) Only search monitored items, `true|false`, default `true`.
-- `GTH_REQUIRE_CUTOFF_UNMET`: (Optional) Only search items that haven't met quality cutoff, `true|false`, default `true`.
-- `GTH_DRY_RUN`: (Optional) Test eligibility without actually searching, `true|false`, default `false`.
+| Variable | Description | Default |
+|----------|-------------|---------|
+| **Scheduling** | | |
+| `GTH_OPS_PER_INTERVAL` | Number of operations per interval | `1` |
+| `GTH_INTERVAL_S` | Interval duration in seconds | `60` |
+| `GTH_ITEM_REVISIT_S` | Minimum seconds before reprocessing a previously successful item | `604800` (1 week) |
+| **Eligibility** | | |
+| `GTH_REQUIRE_MONITORED` | Only search monitored items | `true` |
+| `GTH_REQUIRE_CUTOFF_UNMET` | Only search items that haven't met quality cutoff | `true` |
+| `GTH_REQUIRE_RELEASED` | Only search items that have been released | `true` |
+| `GTH_INCLUDE_TAGS` | Comma-separated tags; items must have at least one matching tag, empty = no filter | (empty) |
+| `GTH_EXCLUDE_TAGS` | Comma-separated tags; items with any matching tag are excluded, empty = no filter | (empty) |
+| `GTH_MIN_MISSING_EPISODES` | (Sonarr) Minimum number of missing episodes required | `0` |
+| `GTH_MIN_MISSING_PERCENT` | (Sonarr) Minimum percentage of missing episodes required (0.0–100.0) | `0.0` |
+| **Behavior** | | |
+| `GTH_DRY_RUN` | Test eligibility without actually searching | `false` |
 
 ### Advanced configuration
 
 #### HTTP server (health and metrics)
 
-- `GTH_LISTEN_ADDRESS`: (Optional) Listen address for the HTTP server (health and metrics endpoints), default `0.0.0.0`.
-- `GTH_LISTEN_PORT`: (Optional) Listen port for the HTTP server, default `9090`.
-- `GTH_METRICS_ENABLED`: (Optional) Whether or not to host the metrics endpoint, `true|false`, default `false`. The health endpoint (`/health`) is always served regardless of this setting.
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GTH_LISTEN_ADDRESS` | Listen address for health and metrics endpoints | `0.0.0.0` |
+| `GTH_LISTEN_PORT` | Listen port for the HTTP server | `9090` |
+| `GTH_METRICS_ENABLED` | Host the Prometheus metrics endpoint (`/metrics`). Health endpoint (`/health`) is always served | `false` |
 
-#### Filtering and tuning
+#### Request and search retry
 
-- `GTH_RELEASED_ONLY`: (Optional) Only search items that have been released, `true|false`, default `false`.
-- `GTH_HTTP_MAX_RETRIES`: (Optional) Maximum HTTP retry attempts per request (network/5xx/429), default `3`.
-- `GTH_HTTP_RETRY_INITIAL_DELAY_S`: (Optional) Initial retry delay in seconds for HTTP requests, default `1.0`.
-- `GTH_HTTP_RETRY_BACKOFF_EXPONENT`: (Optional) Exponential backoff multiplier for HTTP retries, default `2.0`.
-- `GTH_HTTP_RETRY_MAX_DELAY_S`: (Optional) Maximum delay between HTTP retries in seconds, default `30.0`.
-- `GTH_HTTP_TIMEOUT_S`: (Optional) Timeout for all HTTP requests in seconds, default `30.0`.
-- `GTH_SEARCH_RETRY_MAX_ATTEMPTS`: (Optional) Maximum retry attempts for failed item searches (`0` = retry indefinitely), default `5`.
-- `GTH_SEARCH_RETRY_INITIAL_DELAY_S`: (Optional) Initial delay before retrying a failed item search, default `60`.
-- `GTH_SEARCH_RETRY_BACKOFF_EXPONENT`: (Optional) Exponential backoff multiplier for failed-search retries, default `2.0`.
-- `GTH_SEARCH_RETRY_MAX_DELAY_S`: (Optional) Maximum delay between failed-search retries in seconds, default `86400` (24 hours).
-- `GTH_DRY_RUN`: (Optional) Test eligibility without actually searching, `true|false`, default `false`.
-- `GTH_INCLUDE_TAGS`: (Optional) Comma-separated list of tags. Items must have at least one matching tag, default empty (no filter).
-- `GTH_EXCLUDE_TAGS`: (Optional) Comma-separated list of tags. Items with any matching tag are excluded, default empty (no filter).
-- `GTH_MIN_MISSING_EPISODES`: (Optional) For Sonarr, minimum number of missing episodes required, default `0` (no threshold).
-- `GTH_MIN_MISSING_PERCENT`: (Optional) For Sonarr, minimum percentage of missing episodes required (0.0-100.0), default `0.0` (no threshold).
-- `GTH_SHUTDOWN_TIMEOUT_S`: (Optional) Seconds to wait for in-flight work to complete before forcing shutdown on SIGTERM/SIGINT. Default `30`. Use `0` for immediate cancellation.
+**HTTP request retry** — retries for transient failures (network, 5xx, 429):
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GTH_HTTP_TIMEOUT_S` | Timeout in seconds for all external HTTP calls to *arr APIs | `30` |
+| `GTH_HTTP_MAX_RETRIES` | Maximum HTTP retry attempts per request | `3` |
+| `GTH_HTTP_RETRY_INITIAL_DELAY_S` | Initial retry delay in seconds | `1.0` |
+| `GTH_HTTP_RETRY_BACKOFF_EXPONENT` | Exponential backoff multiplier | `2.0` |
+| `GTH_HTTP_RETRY_MAX_DELAY_S` | Maximum delay between retries in seconds | `30.0` |
+
+**Failed search retry** — retries for items that previously failed a search:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GTH_SEARCH_RETRY_MAX_ATTEMPTS` | Maximum retry attempts (`0` = retry indefinitely) | `5` |
+| `GTH_SEARCH_RETRY_INITIAL_DELAY_S` | Initial delay before retrying a failed item search | `60` |
+| `GTH_SEARCH_RETRY_BACKOFF_EXPONENT` | Exponential backoff multiplier | `2.0` |
+| `GTH_SEARCH_RETRY_MAX_DELAY_S` | Maximum delay between retries in seconds | `86400` (24 hours) |
+
+#### Shutdown
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GTH_SHUTDOWN_TIMEOUT_S` | Seconds to wait for in-flight work before forcing shutdown on SIGTERM/SIGINT. Use `0` for immediate cancellation | `30` |
+
+#### Misc
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GTH_LOG_LEVEL` | Log verbosity: `debug`, `info`, `warn`, `error` | `info` |
+| `GTH_STATE_FILE_PATH` | Path to state persistence file | `/data/state.yaml` |
 
 #### Per-target overrides
 
-All global options may be overridden per target with `GTH_ARR_<n>_<OPTION>`:
+All global options may be overridden per target with `GTH_ARR_<n>_<OPTION>`. The override structure mirrors the section structure above:
 
-- `GTH_ARR_<n>_OPS_PER_INTERVAL`, `GTH_ARR_<n>_INTERVAL_S`, `GTH_ARR_<n>_ITEM_REVISIT_S`, `GTH_ARR_<n>_HTTP_TIMEOUT_S`
-- `GTH_ARR_<n>_REQUIRE_MONITORED`, `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`, `GTH_ARR_<n>_RELEASED_ONLY`
-- `GTH_ARR_<n>_HTTP_MAX_RETRIES`, `GTH_ARR_<n>_HTTP_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_HTTP_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_HTTP_RETRY_MAX_DELAY_S`
-- `GTH_ARR_<n>_SEARCH_RETRY_MAX_ATTEMPTS`, `GTH_ARR_<n>_SEARCH_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_DELAY_S`
-- `GTH_ARR_<n>_DRY_RUN`
-- `GTH_ARR_<n>_INCLUDE_TAGS`, `GTH_ARR_<n>_EXCLUDE_TAGS`
-- `GTH_ARR_<n>_MIN_MISSING_EPISODES`, `GTH_ARR_<n>_MIN_MISSING_PERCENT`
+| Section | Overridable variables |
+|---------|-----------------------|
+| **Base** | `GTH_ARR_<n>_OPS_PER_INTERVAL`, `GTH_ARR_<n>_INTERVAL_S`, `GTH_ARR_<n>_ITEM_REVISIT_S`, `GTH_ARR_<n>_REQUIRE_MONITORED`, `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`, `GTH_ARR_<n>_REQUIRE_RELEASED`, `GTH_ARR_<n>_INCLUDE_TAGS`, `GTH_ARR_<n>_EXCLUDE_TAGS`, `GTH_ARR_<n>_MIN_MISSING_EPISODES`, `GTH_ARR_<n>_MIN_MISSING_PERCENT`, `GTH_ARR_<n>_DRY_RUN` |
+| **Retry** | `GTH_ARR_<n>_HTTP_TIMEOUT_S`, `GTH_ARR_<n>_HTTP_MAX_RETRIES`, `GTH_ARR_<n>_HTTP_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_HTTP_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_HTTP_RETRY_MAX_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_ATTEMPTS`, `GTH_ARR_<n>_SEARCH_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_DELAY_S` |
 
 ## Metrics
 

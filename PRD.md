@@ -49,7 +49,7 @@ Gatherarr supports configurable filtering criteria to determine which items are 
   - For Radarr: Only search movies that have not met their quality cutoff (either no file present, or `qualityCutoffNotMet` is true).
   - For Sonarr: Only search seasons where episode file count is less than total episode count, or quality cutoff has not been met.
 
-- **Release Status** (`released_only`, default: `false`):
+- **Release Status** (`require_released`, default: `true`):
   - For Radarr: Only search movies that have been released (have a file, or any release date - digital, physical, or cinema - has passed).
   - For Sonarr: Only search seasons that have released episodes (episode file count > 0, or previous airing date has passed, or series first aired date has passed).
 

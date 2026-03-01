@@ -9,7 +9,7 @@ from app.handlers import MovieHandler, MovieId, SeasonHandler, SeasonId
 def movie_target(
   require_monitored: bool = True,
   require_cutoff_unmet: bool = True,
-  released_only: bool = False,
+  require_released: bool = True,
   include_tags: tuple[str, ...] = (),
   exclude_tags: tuple[str, ...] = (),
 ) -> ArrTarget:
@@ -25,7 +25,7 @@ def movie_target(
       item_revisit_s=3600,
       require_monitored=require_monitored,
       require_cutoff_unmet=require_cutoff_unmet,
-      released_only=released_only,
+      require_released=require_released,
       include_tags=set(include_tags),
       exclude_tags=set(exclude_tags),
     ),
@@ -35,7 +35,7 @@ def movie_target(
 def season_target(
   require_monitored: bool = True,
   require_cutoff_unmet: bool = True,
-  released_only: bool = False,
+  require_released: bool = True,
   include_tags: tuple[str, ...] = (),
   exclude_tags: tuple[str, ...] = (),
   min_missing_episodes: int = 0,
@@ -53,7 +53,7 @@ def season_target(
       item_revisit_s=3600,
       require_monitored=require_monitored,
       require_cutoff_unmet=require_cutoff_unmet,
-      released_only=released_only,
+      require_released=require_released,
       include_tags=set(include_tags),
       exclude_tags=set(exclude_tags),
       min_missing_episodes=min_missing_episodes,
@@ -114,6 +114,7 @@ class TestMovieHandler:
       "id": 42,
       "title": "Test Movie",
       "monitored": True,
+      "hasFile": True,
       "movieFile": {"qualityCutoffNotMet": True},
     }
 
@@ -147,11 +148,13 @@ class TestMovieHandler:
   def test_should_search_when_no_file_present(self) -> None:
     """Treat movies with no file as cutoff unmet."""
     handler = MovieHandler(movie_target())
+    past_release = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
     item = {
       "id": 42,
       "title": "Test Movie",
       "monitored": True,
       "hasFile": False,
+      "digitalRelease": past_release,
     }
 
     assert handler.should_search(item, {}) is True
@@ -163,6 +166,7 @@ class TestMovieHandler:
       "id": 42,
       "title": "Test Movie",
       "monitored": False,
+      "hasFile": True,
       "movieFile": {"qualityCutoffNotMet": True},
     }
 
@@ -181,9 +185,9 @@ class TestMovieHandler:
 
     assert handler.should_search(item, {}) is True
 
-  def test_should_not_search_unreleased_when_released_only_enabled(self) -> None:
-    """Skip unreleased movies when released_only is enabled."""
-    handler = MovieHandler(movie_target(released_only=True))
+  def test_should_not_search_unreleased_when_require_released_enabled(self) -> None:
+    """Skip unreleased movies when require_released is enabled."""
+    handler = MovieHandler(movie_target(require_released=True))
     future_release = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
     item = {
       "id": 42,
@@ -195,9 +199,9 @@ class TestMovieHandler:
 
     assert handler.should_search(item, {}) is False
 
-  def test_should_search_released_movie_when_released_only_enabled(self) -> None:
-    """Allow released movies when released_only is enabled."""
-    handler = MovieHandler(movie_target(released_only=True))
+  def test_should_search_released_movie_when_require_released_enabled(self) -> None:
+    """Allow released movies when require_released is enabled."""
+    handler = MovieHandler(movie_target(require_released=True))
     past_release = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
     item = {
       "id": 42,
@@ -216,6 +220,7 @@ class TestMovieHandler:
       "id": 42,
       "title": "Test Movie",
       "monitored": True,
+      "hasFile": True,
       "movieFile": {"qualityCutoffNotMet": True},
       "tags": ["4k", "hdr"],
     }
@@ -223,6 +228,7 @@ class TestMovieHandler:
       "id": 43,
       "title": "Excluded Movie",
       "monitored": True,
+      "hasFile": True,
       "movieFile": {"qualityCutoffNotMet": True},
       "tags": ["4k", "skip"],
     }

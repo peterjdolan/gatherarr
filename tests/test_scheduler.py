@@ -1,6 +1,7 @@
 """Tests for scheduler module."""
 
 import time
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -30,13 +31,27 @@ class FakeArrClient:
 
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_movies_called = True
+    past_release = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
     return [
-      {"id": 1, "title": "Movie 1", "monitored": True, "hasFile": False},
-      {"id": 2, "title": "Movie 2", "monitored": True, "movieFile": {"qualityCutoffNotMet": True}},
+      {
+        "id": 1,
+        "title": "Movie 1",
+        "monitored": True,
+        "hasFile": False,
+        "digitalRelease": past_release,
+      },
+      {
+        "id": 2,
+        "title": "Movie 2",
+        "monitored": True,
+        "hasFile": True,
+        "movieFile": {"qualityCutoffNotMet": True},
+      },
     ]
 
   async def get_seasons(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_seasons_called = True
+    # episodeFileCount 1 = released; 1 < 10 = cutoff unmet
     return [
       {
         "seriesId": 1,
@@ -47,7 +62,7 @@ class FakeArrClient:
         "seriesTags": [],
         "seriesStatistics": {"qualityCutoffNotMet": True},
         "seriesFirstAired": None,
-        "seasonStatistics": {"episodeFileCount": 0, "totalEpisodeCount": 10},
+        "seasonStatistics": {"episodeFileCount": 1, "totalEpisodeCount": 10},
       }
     ]
 
@@ -110,7 +125,16 @@ class FakeClientWithSingleEligibleMovie(FakeArrClient):
 
   async def get_movies(self, logging_ids: dict[str, Any]) -> list[dict]:
     self.get_movies_called = True
-    return [{"id": 1, "title": "Movie 1", "monitored": True, "hasFile": False}]
+    past_release = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+    return [
+      {
+        "id": 1,
+        "title": "Movie 1",
+        "monitored": True,
+        "hasFile": False,
+        "digitalRelease": past_release,
+      }
+    ]
 
 
 class FakeClientWithSearchError(FakeClientWithSingleEligibleMovie):
@@ -147,7 +171,7 @@ def create_target(
     "item_revisit_s",
     "require_monitored",
     "require_cutoff_unmet",
-    "released_only",
+    "require_released",
     "dry_run",
     "include_tags",
     "exclude_tags",
