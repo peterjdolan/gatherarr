@@ -73,15 +73,13 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 | **Eligibility** | | |
 | `GTH_REQUIRE_MONITORED` | Only search monitored items | `true` |
 | `GTH_REQUIRE_CUTOFF_UNMET` | Only search items that haven't met quality cutoff | `true` |
+| `GTH_RELEASED_ONLY` | Only search items that have been released | `false` |
+| `GTH_INCLUDE_TAGS` | Comma-separated tags; items must have at least one matching tag, empty = no filter | (empty) |
+| `GTH_EXCLUDE_TAGS` | Comma-separated tags; items with any matching tag are excluded, empty = no filter | (empty) |
+| `GTH_MIN_MISSING_EPISODES` | (Sonarr) Minimum number of missing episodes required | `0` |
+| `GTH_MIN_MISSING_PERCENT` | (Sonarr) Minimum percentage of missing episodes required (0.0–100.0) | `0.0` |
 | **Behavior** | | |
 | `GTH_DRY_RUN` | Test eligibility without actually searching | `false` |
-| **HTTP** | | |
-| `GTH_HTTP_TIMEOUT_S` | Timeout in seconds for all external HTTP calls to *arr APIs | `30` |
-| **Shutdown** | | |
-| `GTH_SHUTDOWN_TIMEOUT_S` | Seconds to wait for in-flight work before forcing shutdown on SIGTERM/SIGINT. Use `0` for immediate cancellation | `30` |
-| **Misc** | | |
-| `GTH_LOG_LEVEL` | Log verbosity: `debug`, `info`, `warn`, `error` | `info` |
-| `GTH_STATE_FILE_PATH` | Path to state persistence file | `/data/state.yaml` |
 
 ### Advanced configuration
 
@@ -91,6 +89,7 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 |----------|-------------|---------|
 | `GTH_LISTEN_ADDRESS` | Listen address for health and metrics endpoints | `0.0.0.0` |
 | `GTH_LISTEN_PORT` | Listen port for the HTTP server | `9090` |
+| `GTH_HTTP_TIMEOUT_S` | Timeout in seconds for all external HTTP calls to *arr APIs | `30` |
 | `GTH_METRICS_ENABLED` | Host the Prometheus metrics endpoint (`/metrics`). Health endpoint (`/health`) is always served | `false` |
 
 #### Request and search retry
@@ -113,15 +112,18 @@ Gatherarr will not start if any unrecognized environment variables beginning wit
 | `GTH_SEARCH_RETRY_BACKOFF_EXPONENT` | Exponential backoff multiplier | `2.0` |
 | `GTH_SEARCH_RETRY_MAX_DELAY_S` | Maximum delay between retries in seconds | `86400` (24 hours) |
 
-#### Filtering and tuning
+#### Shutdown
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GTH_RELEASED_ONLY` | Only search items that have been released | `false` |
-| `GTH_INCLUDE_TAGS` | Comma-separated tags; items must have at least one matching tag, empty = no filter | (empty) |
-| `GTH_EXCLUDE_TAGS` | Comma-separated tags; items with any matching tag are excluded, empty = no filter | (empty) |
-| `GTH_MIN_MISSING_EPISODES` | (Sonarr) Minimum number of missing episodes required | `0` |
-| `GTH_MIN_MISSING_PERCENT` | (Sonarr) Minimum percentage of missing episodes required (0.0–100.0) | `0.0` |
+| `GTH_SHUTDOWN_TIMEOUT_S` | Seconds to wait for in-flight work before forcing shutdown on SIGTERM/SIGINT. Use `0` for immediate cancellation | `30` |
+
+#### Misc
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GTH_LOG_LEVEL` | Log verbosity: `debug`, `info`, `warn`, `error` | `info` |
+| `GTH_STATE_FILE_PATH` | Path to state persistence file | `/data/state.yaml` |
 
 #### Per-target overrides
 
@@ -129,9 +131,9 @@ All global options may be overridden per target with `GTH_ARR_<n>_<OPTION>`. The
 
 | Section | Overridable variables |
 |---------|-----------------------|
-| **Base** | `GTH_ARR_<n>_OPS_PER_INTERVAL`, `GTH_ARR_<n>_INTERVAL_S`, `GTH_ARR_<n>_ITEM_REVISIT_S`, `GTH_ARR_<n>_HTTP_TIMEOUT_S`, `GTH_ARR_<n>_REQUIRE_MONITORED`, `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`, `GTH_ARR_<n>_DRY_RUN` |
+| **Base** | `GTH_ARR_<n>_OPS_PER_INTERVAL`, `GTH_ARR_<n>_INTERVAL_S`, `GTH_ARR_<n>_ITEM_REVISIT_S`, `GTH_ARR_<n>_REQUIRE_MONITORED`, `GTH_ARR_<n>_REQUIRE_CUTOFF_UNMET`, `GTH_ARR_<n>_RELEASED_ONLY`, `GTH_ARR_<n>_INCLUDE_TAGS`, `GTH_ARR_<n>_EXCLUDE_TAGS`, `GTH_ARR_<n>_MIN_MISSING_EPISODES`, `GTH_ARR_<n>_MIN_MISSING_PERCENT`, `GTH_ARR_<n>_DRY_RUN` |
+| **HTTP** | `GTH_ARR_<n>_HTTP_TIMEOUT_S` |
 | **Retry** | `GTH_ARR_<n>_HTTP_MAX_RETRIES`, `GTH_ARR_<n>_HTTP_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_HTTP_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_HTTP_RETRY_MAX_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_ATTEMPTS`, `GTH_ARR_<n>_SEARCH_RETRY_INITIAL_DELAY_S`, `GTH_ARR_<n>_SEARCH_RETRY_BACKOFF_EXPONENT`, `GTH_ARR_<n>_SEARCH_RETRY_MAX_DELAY_S` |
-| **Filtering** | `GTH_ARR_<n>_RELEASED_ONLY`, `GTH_ARR_<n>_INCLUDE_TAGS`, `GTH_ARR_<n>_EXCLUDE_TAGS`, `GTH_ARR_<n>_MIN_MISSING_EPISODES`, `GTH_ARR_<n>_MIN_MISSING_PERCENT` |
 
 ## Metrics
 
