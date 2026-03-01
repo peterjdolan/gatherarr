@@ -166,9 +166,9 @@ Attach to the included devcontainer, and run
 uv sync
 ```
 
-### Regenerating API clients
+### API client generation
 
-Radarr and Sonarr client stubs are generated from OpenAPI specs in `context/`. Regenerate with:
+Radarr and Sonarr client stubs are generated from OpenAPI specs in `context/`. They are not committed; `uv run poe check` and the Docker build run `generate-clients` automatically. To regenerate manually:
 
 ```bash
 uv run poe generate-clients

@@ -1,6 +1,10 @@
 # Application ignores
 workspace/
 
+# OpenAPI-generated clients (regenerate with: uv run poe generate-clients)
+app/radarr_client/
+app/sonarr_client/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
